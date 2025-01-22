@@ -110,9 +110,9 @@ You are encourage to try hybrid parallelization (OpenMP + MPI) as a bonus task. 
 
 ## Hint
 
-1. K-mer counting is not a embarrassingly parallel problem, as different DNA sequences may share identical K-mers. You should be careful when parallelizing the code. One possible solution is to firstly divide the input data into several independent parts, process the parts parallely, and then merge the results from each part (if necessary). The provided `GetKmerOwner` function may be useful for this purpose.
+1. K-mer counting is not a embarrassingly parallel problem, as different DNA sequences may share identical K-mers. You should be careful when parallelizing the code. One possible solution is to use locks to avoid race conditions. Another solution is to firstly divide the input data into several independent parts, process the parts parallely, and then merge the results from each part (if necessary). The provided `GetKmerOwner` function may be useful for this purpose.
 2. Many HPC problems are more memory-bound than compute-bound. K-mer counting can be one of them, so you may want to optimize the memory access pattern to improve the performance of your parallel implementation. More compute threads may not always lead to better performance.
-3. When optimizing the performance of you parallel K-mer counter, it's important to take into account the architecture of the supercomputer. Go through the [NERSC's documentation on the architecture of Perlmutter](https://docs.nersc.gov/systems/perlmutter/architecture/), and pay special attention to inter-node connect, inter-socket configuration, and NUMA domain settings.
+3. When optimizing the performance of you parallel K-mer counter, it's important to take into account the architecture of the supercomputer. Go through the [NERSC's documentation on the architecture of Perlmutter](https://docs.nersc.gov/systems/perlmutter/architecture/), and pay special attention to inter-node connect, inter-socket configuration, and NUMA domain settings before tuning your parallel implementation.
 
 
 
@@ -130,8 +130,6 @@ Grade will be based on the following criteria (The timing and speedup calculatio
     - performance evaluation of your parallel implementation, including the final speedup, the weak scaling results, and performance of your counters under different parallelization parameters
     - performance comparison between serial, OpenMP, and MPI implementations on one node
     - analysis of the performance results above
-
-
 3. Bonus Task. 
 
 
