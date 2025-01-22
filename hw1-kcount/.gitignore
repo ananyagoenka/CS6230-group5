@@ -1,0 +1,6 @@
+*.o
+obj/
+kcount
+*.log
+*.out
+.vscode/
