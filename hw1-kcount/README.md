@@ -8,7 +8,7 @@ DNA sequencing is a fundamental technique in bioinformatics. It is used to deter
 
 K-mer counting is a common operation in bioinformatics. A K-mer is a substring of length K in the DNA sequence. For example, if the DNA sequence is "ACGTACGTACGT" and K=3, then the K-mers are "ACG", "CGT", "GTA", "TAC", "ACG", "CGT", "GTA", "TAC", "ACG", and "CGT". The K-mer counting operation counts the number of occurrences of each K-mer in the DNA sequence.
 
-In this assignment, you will implement a **parallel** K-mer counting program. The program will read DNA sequences from a file, count the number of occurrences of each K-mer in the sequences, and output the results. The program should be implemented using the C++ programming language and the OpenMP parallel programming framework.
+In this assignment, you will implement a **parallel** K-mer counting program. The program will read DNA sequences from a file, count the number of occurrences of each K-mer in the sequences, and output the results. The program should be implemented using the C++ programming language and the OpenMP/MPI parallel programming framework.
 
 
 
@@ -74,7 +74,7 @@ Your task is to parallelize the K-mer counting operation in the `kmerops.cpp` fi
 
 In this task, you should use the **OpenMP** parallel programming framework to parallelize the k-mer counting code.
 
-You are only allowed to modify the `kmerops.cpp` and `kmerops.h` file. Currently, two serial implementations, based on hashmaps and sorting algorithms, are provided as starter code.  You can parallelize the code in any way you see fit, but you should aim to generate **accurate** results (no estimation) and achieve good performance on CPU nodes of Perlmutter.
+You are only allowed to modify the `kmerops.cpp` and `kmerops.h` file. Currently, two serial implementations, based on hash tables and sorting algorithms, are provided as starter code.  You can parallelize the code in any way you see fit, but you should aim to generate **accurate** results (no estimation) and achieve good performance on CPU nodes of Perlmutter.
 
 You should provide a `count_kmer_omp` function, which takes in a `DnaBuffer` object wrapped in a unique_ptr and returns a `KmerList` object. `DnaBuffer` consists of multiple DNA sequences, and `KmerList` is a vector of (K-mer, frequency) tuples.  The function signature should be identical to the provided `count_kmer` function, i.e.
 
@@ -110,7 +110,7 @@ You are encourage to try hybrid parallelization (OpenMP + MPI) as a bonus task. 
 
 ## Hint
 
-1. K-mer counting is not a embarrassingly parallel problem, as different DNA sequences may share identical K-mers. You should be careful when parallelizing the code. One possible solution is to use locks to avoid race conditions. Another solution is to firstly divide the input data into several independent parts, process the parts parallely, and then merge the results from each part (if necessary). The provided `GetKmerOwner` function may be useful for this purpose.
+1. K-mer counting is not a embarrassingly parallel problem, as different DNA sequences may share identical K-mers. You should be careful when parallelizing the code. One possible solution is to use locks / atomic operations (on hash tables) to avoid race conditions. Another solution is to firstly divide the input data into several independent parts, process the parts parallely, and then merge the results from each part (if necessary). The provided `GetKmerOwner` function may be useful for this purpose.
 2. Many HPC problems are more memory-bound than compute-bound. K-mer counting can be one of them, so you may want to optimize the memory access pattern to improve the performance of your parallel implementation. More compute threads may not always lead to better performance.
 3. When optimizing the performance of you parallel K-mer counter, it's important to take into account the architecture of the supercomputer. Go through the [NERSC's documentation on the architecture of Perlmutter](https://docs.nersc.gov/systems/perlmutter/architecture/), and pay special attention to inter-node connect, inter-socket configuration, and NUMA domain settings before tuning your parallel implementation.
 
