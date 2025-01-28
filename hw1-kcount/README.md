@@ -136,7 +136,7 @@ Grade will be based on the following criteria (The timing and speedup calculatio
 
 ## Submission
 
-The code should be submitted as a zip file containing the modified `kmerops.cpp` and `kmerops.h` files, the `sbatch` launch script and the report in PDF format. Please remove all outputs to stdout/stderr in your code in case they interfere with the autograder.
+The code should be submitted as a zip file containing your `kmerops.cpp`, `kmerops.h`, `.sbatch` launch scripts, and the report in PDF format. Please remove all outputs to stdout/stderr in your code in case they interfere with the autograder.
 
 Please make sure that your code can be compiled and run on Perlmutter with the provided framework.
 
