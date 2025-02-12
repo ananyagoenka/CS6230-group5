@@ -50,7 +50,8 @@ or a sbatch script to run the kmer counter application. Please refer to [NERSC S
 
 After each run, the elapsed time will be printed to stdout. A histogram of the K-mer frequency will also be printed. The histogram shows the number of K-mers that occur with a certain frequency. It serves as a simple way to verify the correctness of the K-mer counting operation.
 
-
+### Sample input files
+You can find a sample FASTA input file under the `sample_inputs` directory.
 
 
 ### Indexing a dataset
