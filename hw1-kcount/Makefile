@@ -1,3 +1,5 @@
+CXX = /opt/homebrew/opt/llvm/bin/clang++
+CC = /opt/homebrew/opt/llvm/bin/clang
 K?=51
 LOG?=2
 D?=0
@@ -11,9 +13,12 @@ else
 OPT+=-O3
 endif
 
-FLAGS=$(OPT) $(COMPILE_TIME_PARAMETERS) -DTHREADED -fopenmp -Wall -std=c++17 -I./include -I./src
+MPI_INC = -I/opt/homebrew/opt/open-mpi/include
+FLAGS=$(OPT) $(COMPILE_TIME_PARAMETERS) -DTHREADED -Xpreprocessor -fopenmp -Wall -std=c++17 -I./include -I./src $(MPI_INC)
 
-COMPILER=CC
+COMPILER=$(CXX)
+
+LDFLAGS=-L/opt/homebrew/opt/llvm/lib -lomp -L/opt/homebrew/opt/open-mpi/lib -lmpi
 
 OBJECTS=obj/timer.o \
 		obj/dnaseq.o \
@@ -22,19 +27,16 @@ OBJECTS=obj/timer.o \
 		obj/hashfuncs.o \
 		obj/kmerops.o \
 
-
 all: kcount
 
 install: kcount
 	cp kcount $(HOME)/bin
 
 kcount: obj/main.o $(OBJECTS)
-#	@echo $(COMPILER) $(FLAGS) -c -o $@ $^
-	$(COMPILER) $(FLAGS) -o $@ $^
+	$(COMPILER) $(FLAGS) -o $@ $^ $(LDFLAGS)
 
 obj/%.o: src/%.cpp
 	@mkdir -p $(@D)
-#	@echo $(COMPILER) $(FLAGS) -c -o $@ $<
 	$(COMPILER) $(FLAGS) -c -o $@ $<
 
 obj/main.o: src/main.cpp include/timer.hpp include/dnaseq.hpp include/dnabuffer.hpp include/fastaindex.hpp include/kmerops.hpp

@@ -13,19 +13,21 @@ typedef std::tuple<TKmer, int> KmerListEntry;
 typedef std::vector<KmerListEntry> KmerList;
 
 // KmerSeedStruct is a simple wrapper struct that contains a kmer.
-struct KmerSeedStruct{
-    TKmer kmer; 
+struct KmerSeedStruct
+{
+    TKmer kmer;
 
     KmerSeedStruct(TKmer kmer) : kmer(kmer) {};
-    KmerSeedStruct(const KmerSeedStruct& o) : kmer(o.kmer) {};
-    KmerSeedStruct(KmerSeedStruct&& o) : kmer(std::move(o.kmer)) {};
+    KmerSeedStruct(const KmerSeedStruct &o) : kmer(o.kmer) {};
+    KmerSeedStruct(KmerSeedStruct &&o) : kmer(std::move(o.kmer)) {};
     KmerSeedStruct() {};
 
     int GetByte(int &i) const { return kmer.getByte(i); }
-    bool operator<(const KmerSeedStruct& o) const { return kmer < o.kmer; }
-    bool operator==(const KmerSeedStruct& o) const { return kmer == o.kmer; }
-    bool operator!=(const KmerSeedStruct& o) const { return kmer != o.kmer; }
-    KmerSeedStruct& operator=(const KmerSeedStruct& o) {
+    bool operator<(const KmerSeedStruct &o) const { return kmer < o.kmer; }
+    bool operator==(const KmerSeedStruct &o) const { return kmer == o.kmer; }
+    bool operator!=(const KmerSeedStruct &o) const { return kmer != o.kmer; }
+    KmerSeedStruct &operator=(const KmerSeedStruct &o)
+    {
         kmer = o.kmer;
         return *this;
     }
@@ -33,47 +35,57 @@ struct KmerSeedStruct{
 typedef std::vector<KmerSeedStruct> KmerSeedBucket;
 
 // KmerSeedHash is a hash function for KmerSeedStruct.
-struct KmerSeedHash {
-    size_t operator()(const KmerSeedStruct& kmerseed) const {
+struct KmerSeedHash
+{
+    size_t operator()(const KmerSeedStruct &kmerseed) const
+    {
         return kmerseed.kmer.GetHash();
     }
 };
 
 // KmerParserHandler is a function that takes a kmer and stores it in a vector.
-// When implementing a parallel version of count_kmer, you may want to 
+// When implementing a parallel version of count_kmer, you may want to
 // create your own k-mer parser handler.
-struct KmerParserHandler {
-    std::vector<KmerSeedStruct>& kmerseeds;
+struct KmerParserHandler
+{
+    std::vector<KmerSeedStruct> &kmerseeds;
 
-    KmerParserHandler(std::vector<KmerSeedStruct>& kmerseeds) : kmerseeds(kmerseeds) {}
+    KmerParserHandler(std::vector<KmerSeedStruct> &kmerseeds) : kmerseeds(kmerseeds) {}
 
-    void operator()(const TKmer& kmer) {
+    void operator()(const TKmer &kmer)
+    {
         kmerseeds.emplace_back(kmer);
     }
 };
 
 // KmerHashmapHandler is a function that takes a kmer and stores it in a hashmap.
-struct KmerHashmapHandler {
-    std::unordered_map<KmerSeedStruct, int, KmerSeedHash>* kmermap;
+struct KmerHashmapHandler
+{
+    std::unordered_map<KmerSeedStruct, int, KmerSeedHash> *kmermap;
 
-    KmerHashmapHandler(std::unordered_map<KmerSeedStruct, int, KmerSeedHash>* kmermap) : kmermap(kmermap) {}
+    KmerHashmapHandler(std::unordered_map<KmerSeedStruct, int, KmerSeedHash> *kmermap) : kmermap(kmermap) {}
 
-    void operator()(const TKmer& kmer) {
+    void operator()(const TKmer &kmer)
+    {
         KmerSeedStruct kmerseed(kmer);
         auto it = kmermap->find(kmerseed);
-        if (it == kmermap->end()) {
+        if (it == kmermap->end())
+        {
             (*kmermap)[kmerseed] = 1;
-        } else {
+        }
+        else
+        {
             it->second++;
         }
     }
-
 };
 
-int GetKmerOwner(const TKmer& kmer, int ntasks);
+int GetKmerOwner(const TKmer &kmer, int ntasks);
 
-std::unique_ptr<KmerList> count_kmer(const DnaBuffer& myreads);
+std::unique_ptr<KmerList> count_kmer(const DnaBuffer &myreads);
 
-std::unique_ptr<KmerList> count_kmer_hashmap(const DnaBuffer& myreads);
+std::unique_ptr<KmerList> count_kmer_omp(const DnaBuffer &myreads);
+
+std::unique_ptr<KmerList> count_kmer_hashmap(const DnaBuffer &myreads);
 
 #endif // KMEROPS_HPP

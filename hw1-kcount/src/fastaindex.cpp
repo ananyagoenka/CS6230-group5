@@ -15,7 +15,7 @@
 
 using Record = typename FastaIndex::Record;
 
-Record FastaIndex::get_faidx_record(const std::string& line, std::string& name)
+Record FastaIndex::get_faidx_record(const std::string &line, std::string &name)
 {
     /*
      * Read a line from a FASTA index file into a record object.
@@ -47,11 +47,12 @@ int FastaIndex::getreadowner(size_t i) const
     return static_cast<int>(iditr - readdispls.cbegin());
 }
 
-void FastaIndex::getpartition(std::vector<MPI_Count_t>& sendcounts)
+void FastaIndex::getpartition(std::vector<MPI_Count_t> &sendcounts)
 {
     assert(sendcounts.size() == (uint64_t)nprocs);
 
-    size_t totbases = std::accumulate(rootrecords.begin(), rootrecords.end(), static_cast<size_t>(0), [](size_t sum, const auto& record) { return sum + record.len; });
+    size_t totbases = std::accumulate(rootrecords.begin(), rootrecords.end(), static_cast<size_t>(0), [](size_t sum, const auto &record)
+                                      { return sum + record.len; });
     size_t numreads = rootrecords.size();
     double avgbasesperproc = static_cast<double>(totbases) / nprocs;
 
@@ -67,7 +68,7 @@ void FastaIndex::getpartition(std::vector<MPI_Count_t>& sendcounts)
 
     size_t readid = 0;
 
-    for (int i = 0; i < nprocs-1; ++i)
+    for (int i = 0; i < nprocs - 1; ++i)
     {
         size_t basessofar = 0;
         size_t startid = readid;
@@ -82,10 +83,8 @@ void FastaIndex::getpartition(std::vector<MPI_Count_t>& sendcounts)
             readid++;
         } while (readid < numreads && basessofar + rootrecords[readid].len < avgbasesperproc);
 
-
-
         size_t readssofar = readid - startid;
-        assert(readssofar >= 1); /* TODO: come up with a recovery strategy here */
+        assert(readssofar >= 1);    /* TODO: come up with a recovery strategy here */
         assert(readid <= numreads); /* TODO: come up with a recovery strategy here */
 
         sendcounts[i] = readssofar;
@@ -97,7 +96,7 @@ void FastaIndex::getpartition(std::vector<MPI_Count_t>& sendcounts)
     sendcounts.back() = numreads - readid;
 }
 
-FastaIndex::FastaIndex(const std::string& fasta_fname) :  comm(MPI_COMM_WORLD), fasta_fname(fasta_fname)
+FastaIndex::FastaIndex(const std::string &fasta_fname) : comm(MPI_COMM_WORLD), fasta_fname(fasta_fname)
 {
 
     MPI_Comm_size(comm, &nprocs);
@@ -182,7 +181,8 @@ std::vector<size_t> FastaIndex::getmyreadlens() const
      *  of read lengths we have to unpack them.
      */
     std::vector<size_t> readlens(getmyreadcount());
-    std::transform(myrecords.cbegin(), myrecords.cend(), readlens.begin(), [](const auto& record) { return record.len; });
+    std::transform(myrecords.cbegin(), myrecords.cend(), readlens.begin(), [](const auto &record)
+                   { return record.len; });
     return readlens;
 }
 
@@ -191,13 +191,13 @@ DnaBuffer FastaIndex::getmydna() const
     /*
      * Allocate local sequence buffer.
      */
-    auto readlens = getmyreadlens(); /* vector of local read lengths */
+    auto readlens = getmyreadlens();                      /* vector of local read lengths */
     size_t bufsize = DnaBuffer::computebufsize(readlens); /* minimum number of bytes needed to 2-bit encode all the local reads */
-    DnaBuffer dnabuf(bufsize); /* initialize dnabuf by allocating @bufsize bytes */
+    DnaBuffer dnabuf(bufsize);                            /* initialize dnabuf by allocating @bufsize bytes */
 
-    MPI_Offset startpos; /* the FASTA position that starts my local chunk of reads */
-    MPI_Offset endpos; /* the FASTA position that ends my local chunk of reads (exclusive) */
-    MPI_Offset filesize; /* the total size of the FASTA */
+    MPI_Offset startpos;    /* the FASTA position that starts my local chunk of reads */
+    MPI_Offset endpos;      /* the FASTA position that ends my local chunk of reads (exclusive) */
+    MPI_Offset filesize;    /* the total size of the FASTA */
     MPI_Offset readbufsize; /* endpos - startpos */
     MPI_File fh;
 
@@ -213,7 +213,8 @@ DnaBuffer FastaIndex::getmydna() const
      */
     startpos = myrecords.front().pos;
     endpos = myrecords.back().pos + myrecords.back().len + (myrecords.back().len / myrecords.back().bases);
-    if (endpos > filesize) endpos = filesize;
+    if (endpos > filesize)
+        endpos = filesize;
 
     /*
      * Allocate a char buffer to read my FASTA chunk into to,
@@ -265,7 +266,7 @@ DnaBuffer FastaIndex::getmydna() const
             std::memcpy(writeptr, &readbuf[chunkpos + locpos], cnt);
             writeptr += cnt;
             remain -= cnt;
-            locpos += (cnt+1);
+            locpos += (cnt + 1);
         }
 
         /*
