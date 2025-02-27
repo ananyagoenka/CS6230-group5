@@ -10,6 +10,10 @@
 #SBATCH -A m4341_g
 
 #OpenMP settings:
+if [ -z "$KCOUNT_DATASET_PATH" ]; then
+    export KCOUNT_DATASET_PATH="/global/homes/a/ananyag/CS6230-group5/hw1-kcount/sample-input/reads.fa"
+fi
+echo "Dataset path: $KCOUNT_DATASET_PATH"
 export OMP_NUM_THREADS=32
 export OMP_PLACES=threads
 export OMP_PROC_BIND=spread
