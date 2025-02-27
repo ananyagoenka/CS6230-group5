@@ -7,7 +7,7 @@
 #SBATCH --mail-user=aag237@cornell.edu
 #SBATCH --mail-type=ALL
 #SBATCH -t 00:10:00
-#SBATCH -A m4341
+#SBATCH -A m4341_g
 
 #OpenMP settings:
 export OMP_NUM_THREADS=32
