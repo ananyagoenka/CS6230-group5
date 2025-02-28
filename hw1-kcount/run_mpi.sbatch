@@ -2,20 +2,18 @@
 #SBATCH -N 4                  
 #SBATCH -C cpu
 #SBATCH -q debug              
-#SBATCH -J kmer_mpi_aag237   
-#SBATCH --mail-user=aag237@cornell.edu
+#SBATCH -J kmer-mpi-asyam 
+#SBATCH --mail-user=as2839@cornell.edu
 #SBATCH --mail-type=ALL
 #SBATCH -t 00:10:00           
-#SBATCH -A m4341_g            
+#SBATCH -A m4341           
 
 # Set dataset path
-export KCOUNT_DATASET_PATH="/global/homes/a/ananyag/CS6230-group5/hw1-kcount/sample_input/reads.fa"
+export KCOUNT_DATASET_PATH="/global/homes/a/asyam/CS6230-group5/hw1-kcount/sample_input/reads.fa"
 
-# Ensure OpenMP uses the right number of threads
-export OMP_NUM_THREADS=4
-
-module load PrgEnv-gnu
-module load cray-mpich
+export OMP_NUM_THREADS=1
+export OMP_PLACES=threads
+export OMP_PROC_BIND=spread
 
 # Run the MPI K-mer counter
-srun --cpu_bind=cores ./kcount $KCOUNT_DATASET_PATH
+srun -n 128 -c 8 --cpu_bind=cores ./kcount $KCOUNT_DATASET_PATH mpi
