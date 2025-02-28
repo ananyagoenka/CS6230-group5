@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH -N 4                  
-#SBATCH -C gpu
+#SBATCH -C cpu
 #SBATCH -q debug              
 #SBATCH -J kmer_mpi_aag237   
 #SBATCH --mail-user=aag237@cornell.edu
