@@ -1,5 +1,5 @@
-CXX = /opt/homebrew/opt/llvm/bin/clang++
-CC = /opt/homebrew/opt/llvm/bin/clang
+CXX = CC 
+CC = cc
 K?=51
 LOG?=2
 D?=0
@@ -18,7 +18,7 @@ FLAGS=$(OPT) $(COMPILE_TIME_PARAMETERS) -DTHREADED -Xpreprocessor -fopenmp -Wall
 
 COMPILER=$(CXX)
 
-LDFLAGS=-L/opt/homebrew/opt/llvm/lib -lomp -L/opt/homebrew/opt/open-mpi/lib -lmpi
+LDFLAGS=-fopenmp
 
 OBJECTS=obj/timer.o \
 		obj/dnaseq.o \

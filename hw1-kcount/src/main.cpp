@@ -105,6 +105,7 @@ int main(int argc, char **argv)
     {
         kmerlist = count_kmer(mydna);
     }
+
     timer.stop_and_log("Kmer Counting");
 
     print_kmer_histogram(*kmerlist);
