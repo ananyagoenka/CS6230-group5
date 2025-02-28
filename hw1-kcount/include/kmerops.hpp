@@ -86,6 +86,8 @@ std::unique_ptr<KmerList> count_kmer(const DnaBuffer &myreads);
 
 std::unique_ptr<KmerList> count_kmer_omp(const DnaBuffer &myreads);
 
+std::unique_ptr<KmerList> count_kmer_mpi(const DnaBuffer &myreads);
+
 std::unique_ptr<KmerList> count_kmer_hashmap(const DnaBuffer &myreads);
 
 #endif // KMEROPS_HPP

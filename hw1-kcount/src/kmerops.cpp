@@ -8,6 +8,7 @@
 #include <cmath>
 #include <unordered_map>
 #include <omp.h>
+#include <mpi.h>
 #include <unordered_map>
 #include <vector>
 
@@ -170,4 +171,57 @@ std::unique_ptr<KmerList> count_kmer_omp(const DnaBuffer &myreads)
     }
 
     return std::unique_ptr<KmerList>(kmerlist);
+}
+
+std::unique_ptr<KmerList> count_kmer_mpi(const DnaBuffer &myreads)
+{
+    Timer timer;
+    int world_size, myrank;
+    MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+    MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
+
+    std::unordered_map<KmerSeedStruct, int, KmerSeedHash> local_kmer_map;
+    KmerHashmapHandler handler(&local_kmer_map);
+    ForeachKmer(myreads, handler);
+
+    std::vector<std::pair<KmerSeedStruct, int>> local_kmer_list(local_kmer_map.begin(), local_kmer_map.end());
+
+    int local_size = local_kmer_list.size();
+    std::vector<int> recv_sizes(world_size);
+    MPI_Gather(&local_size, 1, MPI_INT, recv_sizes.data(), 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+    std::vector<int> displs(world_size, 0);
+    int total_size = 0;
+    if (myrank == 0)
+    {
+        for (int i = 0; i < world_size; ++i)
+        {
+            displs[i] = total_size;
+            total_size += recv_sizes[i];
+        }
+    }
+
+    std::vector<std::pair<KmerSeedStruct, int>> global_kmer_list(total_size);
+    MPI_Gatherv(local_kmer_list.data(), local_size * sizeof(std::pair<KmerSeedStruct, int>), MPI_BYTE,
+                global_kmer_list.data(), recv_sizes.data(), displs.data(), MPI_BYTE,
+                0, MPI_COMM_WORLD);
+
+    std::unique_ptr<KmerList> kmerlist;
+    if (myrank == 0)
+    {
+        std::unordered_map<KmerSeedStruct, int, KmerSeedHash> global_kmer_map;
+        for (const auto &entry : global_kmer_list)
+        {
+            global_kmer_map[entry.first] += entry.second;
+        }
+
+        kmerlist = std::make_unique<KmerList>();
+        for (const auto &entry : global_kmer_map)
+        {
+            kmerlist->push_back(KmerListEntry(entry.first.kmer, entry.second));
+        }
+    }
+
+    MPI_Barrier(MPI_COMM_WORLD);
+    return kmerlist;
 }
