@@ -11,7 +11,8 @@
 
 #OpenMP settings:
 
-export KCOUNT_DATASET_PATH="/global/homes/a/asyam/CS6230-group5/hw1-kcount/sample_input/reads.fa"
+# export KCOUNT_DATASET_PATH="/global/homes/a/asyam/CS6230-group5/hw1-kcount/sample_input/reads.fa"
+
 export OMP_NUM_THREADS=32
 export OMP_PLACES=threads
 export OMP_PROC_BIND=spread
