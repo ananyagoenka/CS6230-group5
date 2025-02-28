@@ -87,14 +87,6 @@ int main(int argc, char **argv)
         {
             kmerlist = count_kmer_omp(mydna);
         }
-        else if (mode == "mpi")
-        {
-            kmerlist = count_kmer_mpi(mydna);
-        }
-        else if (mode == "hybrid")
-        {
-            kmerlist = count_kmer_hybrid(mydna);
-        }
         else if (mode == "serial")
         {
             kmerlist = count_kmer(mydna);
