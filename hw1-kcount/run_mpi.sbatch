@@ -9,7 +9,7 @@
 #SBATCH -A m4341           
 
 # Set dataset path
-export KCOUNT_DATASET_PATH="/global/homes/a/asyam/CS6230-group5/hw1-kcount/sample_input/reads.fa"
+export KCOUNT_DATASET_PATH="/global/homes/a/asyam/CS6230-group5/hw1-kcount/sample_input/sample1.fa"
 
 export OMP_NUM_THREADS=1
 export OMP_PLACES=threads

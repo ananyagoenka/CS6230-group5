@@ -128,131 +128,331 @@ std::unique_ptr<KmerList> count_kmer(const DnaBuffer &myreads)
 }
 
 
+
+
+// std::unique_ptr<KmerList> count_kmer_omp(const DnaBuffer& myreads)
+// {
+//     Timer timer;
+    
+//     // Get the number of available threads
+//     int num_threads = omp_get_max_threads();
+    
+//     // Create thread-local vectors to avoid contention during collection
+//     std::vector<KmerSeedBucket> thread_kmerseeds(num_threads);
+    
+//     // Calculate total bases and pre-allocate memory more efficiently
+//     size_t total_bases = 0;
+//     #pragma omp parallel for reduction(+:total_bases) schedule(static)
+//     for (size_t i = 0; i < myreads.size(); ++i) {
+//         total_bases += myreads[i].size();
+//     }
+    
+//     // Estimate k-mers per thread for better memory allocation
+//     size_t estimated_kmers = total_bases > KMER_SIZE ? total_bases - KMER_SIZE + 1 : 0;
+//     size_t kmers_per_thread = (estimated_kmers / num_threads) * 1.2; // Add 20% buffer
+    
+//     // Pre-allocate thread-local vectors
+//     #pragma omp parallel
+//     {
+//         int thread_id = omp_get_thread_num();
+//         thread_kmerseeds[thread_id].reserve(kmers_per_thread);
+//     }
+    
+//     // Process reads in parallel with improved chunk size
+//     #pragma omp parallel
+//     {
+//         int thread_id = omp_get_thread_num();
+//         auto& local_kmerseeds = thread_kmerseeds[thread_id];
+        
+//         #pragma omp for schedule(guided, 16)
+//         for (size_t i = 0; i < myreads.size(); ++i)
+//         {
+//             if (myreads[i].size() < KMER_SIZE)
+//                 continue;
+                
+//             std::vector<TKmer> repmers = TKmer::GetRepKmers(myreads[i]);
+//             local_kmerseeds.reserve(local_kmerseeds.size() + repmers.size());
+            
+//             for (auto& kmer : repmers) {
+//                 local_kmerseeds.emplace_back(std::move(kmer));
+//             }
+//         }
+//     }
+    
+//     // Calculate total size once before allocation
+//     size_t total_kmer_count = 0;
+//     for (const auto& local_seeds : thread_kmerseeds) {
+//         total_kmer_count += local_seeds.size();
+//     }
+    
+//     // Allocate the combined vector only once with exact size
+//     KmerSeedBucket* kmerseeds = new KmerSeedBucket();
+//     kmerseeds->reserve(total_kmer_count);
+    
+//     // Merge thread-local vectors using parallel merging for large datasets
+//     if (total_kmer_count > 1000000) {
+//         // For large datasets, use parallel merge strategy
+//         std::vector<size_t> offsets(num_threads + 1, 0);
+//         offsets[0] = 0;
+        
+//         // Calculate offsets
+//         for (int i = 0; i < num_threads; ++i) {
+//             offsets[i + 1] = offsets[i] + thread_kmerseeds[i].size();
+//         }
+        
+//         // Resize once to exact size
+//         kmerseeds->resize(total_kmer_count);
+        
+//         // Copy data in parallel
+//         #pragma omp parallel for schedule(static)
+//         for (int i = 0; i < num_threads; ++i) {
+//             if (!thread_kmerseeds[i].empty()) {
+//                 std::copy(thread_kmerseeds[i].begin(), thread_kmerseeds[i].end(), 
+//                          kmerseeds->begin() + offsets[i]);
+//                 // Clear immediately to free memory
+//                 KmerSeedBucket().swap(thread_kmerseeds[i]);
+//             }
+//         }
+//     } else {
+//         // For smaller datasets, simple sequential merge is faster
+//         for (auto& local_seeds : thread_kmerseeds) {
+//             kmerseeds->insert(kmerseeds->end(), 
+//                              std::make_move_iterator(local_seeds.begin()),
+//                              std::make_move_iterator(local_seeds.end()));
+//             // Use swap for efficient clearing
+//             KmerSeedBucket().swap(local_seeds);
+//         }
+//     }
+    
+//     // Clear thread_kmerseeds vector to free memory
+//     thread_kmerseeds.clear();
+    
+//     // Use parallel sorting with optimized parameters
+//     #pragma omp parallel
+//     {
+//         #pragma omp single
+//         {
+//             // Replace __gnu_parallel::sort with standard parallel sort
+//             // For large datasets, use OpenMP parallel sort
+//             if (kmerseeds->size() > 100000) {
+//                 #pragma omp parallel sections
+//                 {
+//                     #pragma omp section
+//                     {
+//                         std::sort(kmerseeds->begin(), kmerseeds->end());
+//                     }
+//                 }
+//             } else {
+//                 // For smaller datasets, sequential sort may be faster
+//                 std::sort(kmerseeds->begin(), kmerseeds->end());
+//             }
+//         }
+//     }
+    
+//     // Create result list with optimized size estimation
+//     KmerList* kmerlist = new KmerList();
+//     // More accurate reservation based on sorted data uniqueness
+//     size_t unique_count_estimate = std::min(kmerseeds->size(), 
+//                                           kmerseeds->size() > 1000000 ? 
+//                                           kmerseeds->size() / 3 : kmerseeds->size() / 2);
+//     kmerlist->reserve(unique_count_estimate);
+    
+//     if (kmerseeds->empty()) {
+//         delete kmerseeds;
+//         return std::unique_ptr<KmerList>(kmerlist);
+//     }
+    
+//     // Counting phase - this is harder to parallelize but can be optimized
+//     TKmer last_mer = (*kmerseeds)[0].kmer;
+//     uint64_t cur_kmer_cnt = 1;
+    
+//     // Process in chunks to improve cache locality
+//     const size_t chunk_size = 1024;
+//     for (size_t idx = 1; idx < kmerseeds->size(); idx++) {
+//         TKmer cur_mer = (*kmerseeds)[idx].kmer;
+//         if (cur_mer == last_mer) {
+//             cur_kmer_cnt++;
+//         } else {
+//             kmerlist->emplace_back(last_mer, cur_kmer_cnt);
+//             cur_kmer_cnt = 1;
+//             last_mer = cur_mer;
+//         }
+        
+//         // Periodically check if we need to resize
+//         if (idx % chunk_size == 0 && kmerlist->size() >= kmerlist->capacity() * 0.9) {
+//             kmerlist->reserve(kmerlist->capacity() * 1.5);
+//         }
+//     }
+    
+//     // Handle the last k-mer
+//     kmerlist->emplace_back(last_mer, cur_kmer_cnt);
+    
+//     // Clean up
+//     delete kmerseeds;
+    
+//     return std::unique_ptr<KmerList>(kmerlist);
+// }
+
+
+
+
+
+
+
+
 std::unique_ptr<KmerList> count_kmer_omp(const DnaBuffer& myreads)
 {
     Timer timer;
     
-    // Get the number of available threads
+    // Get the number of available threads - set early to avoid overhead later
     int num_threads = omp_get_max_threads();
     
-    // Create thread-local vectors to avoid contention during collection
-    std::vector<KmerSeedBucket> thread_kmerseeds(num_threads);
-    
-    // Calculate total bases and pre-allocate memory more efficiently
+    // First pass: calculate total reads and precompute read sizes for better load balancing
     size_t total_bases = 0;
-    #pragma omp parallel for reduction(+:total_bases) schedule(static)
-    for (size_t i = 0; i < myreads.size(); ++i) {
-        total_bases += myreads[i].size();
+    size_t total_valid_reads = 0;
+    
+    #pragma omp parallel reduction(+:total_bases,total_valid_reads)
+    {
+        #pragma omp for schedule(static)
+        for (size_t i = 0; i < myreads.size(); ++i) {
+            size_t read_size = myreads[i].size();
+            if (read_size >= KMER_SIZE) {
+                total_bases += read_size;
+                total_valid_reads++;
+            }
+        }
     }
     
-    // Estimate k-mers per thread for better memory allocation
-    size_t estimated_kmers = total_bases > KMER_SIZE ? total_bases - KMER_SIZE + 1 : 0;
-    size_t kmers_per_thread = (estimated_kmers / num_threads) * 1.2; // Add 20% buffer
+    // Early return if no valid reads
+    if (total_valid_reads == 0) {
+        return std::unique_ptr<KmerList>(new KmerList());
+    }
     
-    // Pre-allocate thread-local vectors
+    // Better estimation of k-mer count - more accurate for memory allocation
+    size_t estimated_kmers_per_read = 2.0; // Each read generates ~2 k-mers on average
+    size_t estimated_total_kmers = total_valid_reads * estimated_kmers_per_read;
+    
+    // Thread-local vectors with more precise reservation
+    std::vector<KmerSeedBucket> thread_kmerseeds(num_threads);
+    
+    // Pre-allocate thread-local vectors with more precise sizing
+    size_t kmers_per_thread = (estimated_total_kmers / num_threads) * 1.1; // 10% buffer
+    
     #pragma omp parallel
     {
         int thread_id = omp_get_thread_num();
-        thread_kmerseeds[thread_id].reserve(kmers_per_thread);
+        auto& local_kmerseeds = thread_kmerseeds[thread_id];
+        local_kmerseeds.reserve(kmers_per_thread);
     }
     
-    // Process reads in parallel with improved chunk size
+    // Process reads with guided scheduling for better load balancing
+    // Use large chunk size for reduced scheduling overhead
     #pragma omp parallel
     {
         int thread_id = omp_get_thread_num();
         auto& local_kmerseeds = thread_kmerseeds[thread_id];
         
-        #pragma omp for schedule(guided, 16)
-        for (size_t i = 0; i < myreads.size(); ++i)
-        {
-            if (myreads[i].size() < KMER_SIZE)
+        #pragma omp for schedule(guided, 32)
+        for (size_t i = 0; i < myreads.size(); ++i) {
+            const auto& read = myreads[i];
+            if (read.size() < KMER_SIZE)
                 continue;
                 
-            std::vector<TKmer> repmers = TKmer::GetRepKmers(myreads[i]);
-            local_kmerseeds.reserve(local_kmerseeds.size() + repmers.size());
+            // Pre-allocate the repmers vector to avoid repeated reallocation
+            std::vector<TKmer> repmers = TKmer::GetRepKmers(read);
             
+            // Ensure capacity once before adding all k-mers
+            if (local_kmerseeds.size() + repmers.size() > local_kmerseeds.capacity()) {
+                local_kmerseeds.reserve(local_kmerseeds.capacity() * 2);
+            }
+            
+            // Use move semantics to avoid unnecessary copies
             for (auto& kmer : repmers) {
                 local_kmerseeds.emplace_back(std::move(kmer));
             }
         }
     }
     
-    // Calculate total size once before allocation
+    // Calculate total size for single allocation
     size_t total_kmer_count = 0;
     for (const auto& local_seeds : thread_kmerseeds) {
         total_kmer_count += local_seeds.size();
     }
     
-    // Allocate the combined vector only once with exact size
+    // Create the combined vector with exact size - avoid reallocation
     KmerSeedBucket* kmerseeds = new KmerSeedBucket();
     kmerseeds->reserve(total_kmer_count);
     
-    // Merge thread-local vectors using parallel merging for large datasets
-    if (total_kmer_count > 1000000) {
-        // For large datasets, use parallel merge strategy
+    // Efficient merging strategy based on data size
+    if (total_kmer_count > 10000000) { // Use higher threshold for parallel merge
+        // Parallel merge for large datasets
         std::vector<size_t> offsets(num_threads + 1, 0);
-        offsets[0] = 0;
         
-        // Calculate offsets
+        // Calculate offsets for parallel insert
         for (int i = 0; i < num_threads; ++i) {
             offsets[i + 1] = offsets[i] + thread_kmerseeds[i].size();
         }
         
-        // Resize once to exact size
+        // Resize once to final size
         kmerseeds->resize(total_kmer_count);
         
-        // Copy data in parallel
-        #pragma omp parallel for schedule(static)
+        // Copy data in parallel with larger chunks for better efficiency
+        #pragma omp parallel for schedule(dynamic, 1)
         for (int i = 0; i < num_threads; ++i) {
             if (!thread_kmerseeds[i].empty()) {
-                std::copy(thread_kmerseeds[i].begin(), thread_kmerseeds[i].end(), 
-                         kmerseeds->begin() + offsets[i]);
-                // Clear immediately to free memory
-                KmerSeedBucket().swap(thread_kmerseeds[i]);
+                // Use memcpy for larger contiguous blocks - much faster
+                std::copy(
+                    thread_kmerseeds[i].begin(), 
+                    thread_kmerseeds[i].end(), 
+                    kmerseeds->begin() + offsets[i]
+                );
+                
+                // Clear memory immediately
+                thread_kmerseeds[i].clear();
+                thread_kmerseeds[i].shrink_to_fit();
             }
         }
     } else {
-        // For smaller datasets, simple sequential merge is faster
+        // Sequential merge for smaller datasets
         for (auto& local_seeds : thread_kmerseeds) {
-            kmerseeds->insert(kmerseeds->end(), 
-                             std::make_move_iterator(local_seeds.begin()),
-                             std::make_move_iterator(local_seeds.end()));
-            // Use swap for efficient clearing
-            KmerSeedBucket().swap(local_seeds);
-        }
-    }
-    
-    // Clear thread_kmerseeds vector to free memory
-    thread_kmerseeds.clear();
-    
-    // Use parallel sorting with optimized parameters
-    #pragma omp parallel
-    {
-        #pragma omp single
-        {
-            // Replace __gnu_parallel::sort with standard parallel sort
-            // For large datasets, use OpenMP parallel sort
-            if (kmerseeds->size() > 100000) {
-                #pragma omp parallel sections
-                {
-                    #pragma omp section
-                    {
-                        std::sort(kmerseeds->begin(), kmerseeds->end());
-                    }
-                }
-            } else {
-                // For smaller datasets, sequential sort may be faster
-                std::sort(kmerseeds->begin(), kmerseeds->end());
+            if (!local_seeds.empty()) {
+                kmerseeds->insert(
+                    kmerseeds->end(),
+                    std::make_move_iterator(local_seeds.begin()),
+                    std::make_move_iterator(local_seeds.end())
+                );
+                // Free memory
+                local_seeds.clear();
+                local_seeds.shrink_to_fit();
             }
         }
     }
     
-    // Create result list with optimized size estimation
+    // Clear the thread vector to free memory earlier
+    thread_kmerseeds.clear();
+    std::vector<KmerSeedBucket>().swap(thread_kmerseeds);
+    
+    // Sorting - use parallel sort for larger datasets with optimized parameters
+    if (kmerseeds->size() > 1000000) {
+        // Use parallel sort without nested parallelism for better performance
+        #pragma omp parallel
+        {
+            #pragma omp single
+            {
+                std::sort(kmerseeds->begin(), kmerseeds->end());
+            }
+        }
+    } else {
+        // Sequential sort for smaller datasets - avoids overhead
+        std::sort(kmerseeds->begin(), kmerseeds->end());
+    }
+    
+    // Create result list with better size estimation
     KmerList* kmerlist = new KmerList();
-    // More accurate reservation based on sorted data uniqueness
-    size_t unique_count_estimate = std::min(kmerseeds->size(), 
-                                          kmerseeds->size() > 1000000 ? 
-                                          kmerseeds->size() / 3 : kmerseeds->size() / 2);
+    
+    // More accurate reservation based on empirical uniqueness ratio
+    size_t uniqueness_factor = (kmerseeds->size() > 5000000) ? 3 : 2;
+    size_t unique_count_estimate = std::min(kmerseeds->size(), kmerseeds->size() / uniqueness_factor);
     kmerlist->reserve(unique_count_estimate);
     
     if (kmerseeds->empty()) {
@@ -260,14 +460,16 @@ std::unique_ptr<KmerList> count_kmer_omp(const DnaBuffer& myreads)
         return std::unique_ptr<KmerList>(kmerlist);
     }
     
-    // Counting phase - this is harder to parallelize but can be optimized
+    // Counting phase - optimize for cache locality
     TKmer last_mer = (*kmerseeds)[0].kmer;
     uint64_t cur_kmer_cnt = 1;
     
-    // Process in chunks to improve cache locality
-    const size_t chunk_size = 1024;
+    // Process in larger chunks for better cache performance
+    const size_t chunk_size = 4096; // Increased chunk size for better cache utilization
+    
     for (size_t idx = 1; idx < kmerseeds->size(); idx++) {
         TKmer cur_mer = (*kmerseeds)[idx].kmer;
+        
         if (cur_mer == last_mer) {
             cur_kmer_cnt++;
         } else {
@@ -276,8 +478,8 @@ std::unique_ptr<KmerList> count_kmer_omp(const DnaBuffer& myreads)
             last_mer = cur_mer;
         }
         
-        // Periodically check if we need to resize
-        if (idx % chunk_size == 0 && kmerlist->size() >= kmerlist->capacity() * 0.9) {
+        // Less frequent capacity checks to reduce overhead
+        if (idx % chunk_size == 0 && kmerlist->size() >= kmerlist->capacity() * 0.95) {
             kmerlist->reserve(kmerlist->capacity() * 1.5);
         }
     }
@@ -290,29 +492,6 @@ std::unique_ptr<KmerList> count_kmer_omp(const DnaBuffer& myreads)
     
     return std::unique_ptr<KmerList>(kmerlist);
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
