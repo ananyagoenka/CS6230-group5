@@ -11,6 +11,11 @@
 # #OpenMP settings:
 
 module load PrgEnv-gnu
+module load openmpi
+module load gcc-native/13.2
+
+# Set the implementation to OpenMP
+export KMER_IMPL=omp
 
 export KCOUNT_DATASET_PATH="/global/homes/a/asyam/CS6230-group5/hw1-kcount/sample_input/reads.fa"
 
@@ -19,5 +24,5 @@ export OMP_PLACES=threads
 export OMP_PROC_BIND=spread
 
 # Run the OpenMP K-mer counter with proper CPU binding
-srun -n 1 -c 256 --cpu_bind=cores ./kcount $KCOUNT_DATASET_PATH omp
+srun -n 1 -c 256 --cpu_bind=cores ./kcount $KCOUNT_DATASET_PATH 
 
