@@ -8,13 +8,13 @@
 #SBATCH -t 00:10:00           
 #SBATCH -A m4341           
 
-module load openmpi
+# Set dataset path
+export KCOUNT_DATASET_PATH="/global/homes/a/asyam/CS6230-group5/hw1-kcount/sample_input/reads.fa"
+
 module load gcc-native/13.2
 
 # Set the implementation to MPI
 export KMER_IMPL=mpi
-# Set dataset path
-export KCOUNT_DATASET_PATH="/global/homes/a/asyam/CS6230-group5/hw1-kcount/sample_input/reads.fa"
 
 export OMP_NUM_THREADS=1
 export OMP_PLACES=threads

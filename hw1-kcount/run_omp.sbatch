@@ -8,10 +8,7 @@
 #SBATCH -t 00:10:00
 
 
-# #OpenMP settings:
-
 module load PrgEnv-gnu
-module load openmpi
 module load gcc-native/13.2
 
 # Set the implementation to OpenMP

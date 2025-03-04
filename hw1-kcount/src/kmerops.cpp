@@ -107,26 +107,6 @@ std::unique_ptr<KmerList> count_kmer_sort(const DnaBuffer &myreads)
     return std::unique_ptr<KmerList>(kmerlist);
 }
 
-// Another implementation using unordered_map
-// std::unique_ptr<KmerList> count_kmer(const DnaBuffer &myreads)
-// {
-//     Timer timer;
-
-//     std::unordered_map<KmerSeedStruct, int, KmerSeedHash> kmermap;
-//     KmerHashmapHandler handler(&kmermap);
-//     ForeachKmer(myreads, handler);
-
-//     KmerList *kmerlist = new KmerList();
-//     for (auto &entry : kmermap)
-//     {
-//         auto kmer = std::get<0>(entry);
-//         auto count = std::get<1>(entry);
-//         kmerlist->push_back(KmerListEntry(kmer.kmer, count));
-//     }
-
-//     return std::unique_ptr<KmerList>(kmerlist);
-// }
-
 
 std::unique_ptr<KmerList> count_kmer(const DnaBuffer &myreads)
 {
@@ -158,6 +138,7 @@ std::unique_ptr<KmerList> count_kmer(const DnaBuffer &myreads)
         return std::unique_ptr<KmerList>(kmerlist);
     }
 }
+
 
 std::unique_ptr<KmerList> count_kmer_omp(const DnaBuffer& myreads)
 {
@@ -338,15 +319,6 @@ std::unique_ptr<KmerList> count_kmer_omp(const DnaBuffer& myreads)
 
 
 
-
-
-
-
-
-
-
-
-
 std::unique_ptr<KmerList> count_kmer_mpi(const DnaBuffer& myreads)
 {
     Timer timer;
@@ -354,170 +326,147 @@ std::unique_ptr<KmerList> count_kmer_mpi(const DnaBuffer& myreads)
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-    // Step 1: Count local k-mers using a hash map with pre-allocation
+    // CRITICAL OPTIMIZATION 1: Use direct hash table construction to reduce memory copies
+    // Estimate size for hash table to avoid rehashing
     size_t total_bases = 0;
     for (size_t i = 0; i < myreads.size(); ++i) {
         total_bases += myreads[i].size();
     }
+    size_t estimated_kmers = total_bases > KMER_SIZE ? total_bases - KMER_SIZE + 1 : 0;
     
-    size_t estimated_kmers = (total_bases > KMER_SIZE) ? (total_bases - KMER_SIZE + 1) : 0;
+    // Use simple hash map based approach - often more efficient for MPI-heavy workloads
     std::unordered_map<KmerSeedStruct, int, KmerSeedHash> local_kmermap;
-    local_kmermap.reserve(estimated_kmers / 2); // Reserve capacity to reduce rehashing
+    local_kmermap.reserve(estimated_kmers / 2);  // Reserve conservatively
     
-    // Use direct hashmap manipulation instead of handler for better performance
+    // Direct insertion without the overhead of handler indirection
     for (size_t i = 0; i < myreads.size(); ++i) {
         if (myreads[i].size() < KMER_SIZE)
             continue;
-            
+        
         std::vector<TKmer> repmers = TKmer::GetRepKmers(myreads[i]);
-        
-        for (auto& kmer : repmers) {
+        for (const auto& kmer : repmers) {
             KmerSeedStruct kmerseed(kmer);
-            auto it = local_kmermap.find(kmerseed);
-            if (it == local_kmermap.end()) {
-                local_kmermap[kmerseed] = 1;
-            } else {
-                it->second++;
-            }
+            local_kmermap[kmerseed]++;
         }
     }
 
-    // Step 2: Optimize k-mer distribution with pre-sized maps
-    std::vector<std::unordered_map<KmerSeedStruct, int, KmerSeedHash>> send_kmermaps(size);
+    // CRITICAL OPTIMIZATION 2: Minimize serialization overhead with flat structures
+    // Create arrays for owner-based distribution - minimize hash lookups
+    std::vector<std::vector<KmerSeedStruct>> kmer_by_owner(size);
+    std::vector<std::vector<int>> count_by_owner(size);
     
-    // Pre-allocate send maps to reduce rehashing
-    size_t avg_kmers_per_proc = local_kmermap.size() / size + 1;
     for (int i = 0; i < size; i++) {
-        send_kmermaps[i].reserve(avg_kmers_per_proc);
+        // Pre-allocate to avoid resizing
+        kmer_by_owner[i].reserve(local_kmermap.size() / size + 10);
+        count_by_owner[i].reserve(local_kmermap.size() / size + 10);
     }
-
-    // Distribute k-mers to their owner processes
-    for (auto& entry : local_kmermap) {
-        // Determine the owner of this k-mer based on its hash
+    
+    // Distribute kmers to owners with minimal overhead
+    for (const auto& entry : local_kmermap) {
         int owner = GetKmerOwner(entry.first.kmer, size);
-        
-        // Add to the appropriate send map
-        auto it = send_kmermaps[owner].find(entry.first);
-        if (it == send_kmermaps[owner].end()) {
-            send_kmermaps[owner][entry.first] = entry.second;
-        } else {
-            it->second += entry.second;
-        }
+        kmer_by_owner[owner].push_back(entry.first);
+        count_by_owner[owner].push_back(entry.second);
     }
-
-    // Clear the local map to free memory
+    
+    // Clear local map to free memory immediately
     local_kmermap.clear();
-    std::unordered_map<KmerSeedStruct, int, KmerSeedHash>().swap(local_kmermap); // Force memory release
+    std::unordered_map<KmerSeedStruct, int, KmerSeedHash>().swap(local_kmermap);
 
-    // Step 3: Use a more efficient serialization approach
-    // Prepare send counts and prepare for buffer size calculation
-    std::vector<int> send_counts(size, 0);
-    std::vector<int> send_buffer_sizes(size, 0);  // Changed to int for MPI compatibility
-    
+    // CRITICAL OPTIMIZATION 3: Reduce MPI communication overhead
+    // Get counts to send to each process
+    std::vector<int> send_counts(size);
     for (int i = 0; i < size; i++) {
-        send_counts[i] = send_kmermaps[i].size();
-        // Calculate buffer size in bytes for each process
-        send_buffer_sizes[i] = send_counts[i] * static_cast<int>(sizeof(TKmer) + sizeof(int));
+        send_counts[i] = kmer_by_owner[i].size();
     }
-
+    
     // Exchange counts
-    std::vector<int> recv_counts(size, 0);
+    std::vector<int> recv_counts(size);
     MPI_Alltoall(send_counts.data(), 1, MPI_INT, recv_counts.data(), 1, MPI_INT, MPI_COMM_WORLD);
-    
-    // Calculate receive buffer sizes in bytes
-    std::vector<int> recv_buffer_sizes(size, 0);
-    for (int i = 0; i < size; i++) {
-        recv_buffer_sizes[i] = recv_counts[i] * static_cast<int>(sizeof(TKmer) + sizeof(int));
-    }
-    
-    // Calculate total buffer sizes
-    size_t total_send_size = 0;
-    size_t total_recv_size = 0;
-    
-    for (int i = 0; i < size; i++) {
-        total_send_size += send_buffer_sizes[i];
-        total_recv_size += recv_buffer_sizes[i];
-    }
-    
-    // Create single send and receive buffers
-    std::vector<char> send_buffer(total_send_size);
-    std::vector<char> recv_buffer(total_recv_size);
     
     // Calculate displacements for MPI_Alltoallv
     std::vector<int> send_displs(size, 0);
     std::vector<int> recv_displs(size, 0);
     
     for (int i = 1; i < size; i++) {
-        send_displs[i] = send_displs[i-1] + send_buffer_sizes[i-1];
-        recv_displs[i] = recv_displs[i-1] + recv_buffer_sizes[i-1];
+        send_displs[i] = send_displs[i-1] + send_counts[i-1];
+        recv_displs[i] = recv_displs[i-1] + recv_counts[i-1];
     }
     
-    // Pack data into send buffer with better locality
-    char* buffer_ptr = send_buffer.data();
-    for (int i = 0; i < size; i++) {
-        for (const auto& entry : send_kmermaps[i]) {
-            // Copy k-mer and count as a block for better cache behavior
-            memcpy(buffer_ptr, &entry.first.kmer, sizeof(TKmer));
-            buffer_ptr += sizeof(TKmer);
-            memcpy(buffer_ptr, &entry.second, sizeof(int));
-            buffer_ptr += sizeof(int);
-        }
-        // Clear map immediately to free memory
-        send_kmermaps[i].clear();
-    }
-    
-    // Clear vector of maps to free memory
-    send_kmermaps.clear();
-    std::vector<std::unordered_map<KmerSeedStruct, int, KmerSeedHash>>().swap(send_kmermaps);
-    
-    // Exchange data with a single Alltoallv call - fixed buffer size parameter
-    MPI_Alltoallv(
-        send_buffer.data(), send_buffer_sizes.data(), send_displs.data(), MPI_BYTE,
-        recv_buffer.data(), recv_buffer_sizes.data(), recv_displs.data(), MPI_BYTE,
-        MPI_COMM_WORLD
-    );
-    
-    // Free send buffer memory immediately
-    send_buffer.clear();
-    std::vector<char>().swap(send_buffer);
-    
-    // Step 4: Process received data with pre-sized final map
-    size_t total_recv_kmers = 0;
+    // Calculate total receive size
+    int total_recv_kmers = 0;
     for (int i = 0; i < size; i++) {
         total_recv_kmers += recv_counts[i];
     }
     
+    // CRITICAL OPTIMIZATION 4: Use separate sends for kmers and counts to avoid struct copies
+    // Create flattened arrays for kmers and counts
+    std::vector<KmerSeedStruct> send_kmers;
+    std::vector<int> send_counts_flat;
+    send_kmers.reserve(local_kmermap.size());
+    send_counts_flat.reserve(local_kmermap.size());
+    
+    for (int i = 0; i < size; i++) {
+        send_kmers.insert(send_kmers.end(), kmer_by_owner[i].begin(), kmer_by_owner[i].end());
+        send_counts_flat.insert(send_counts_flat.end(), count_by_owner[i].begin(), count_by_owner[i].end());
+        
+        // Clear immediately to free memory
+        std::vector<KmerSeedStruct>().swap(kmer_by_owner[i]);
+        std::vector<int>().swap(count_by_owner[i]);
+    }
+    
+    // Clear the outer vectors
+    std::vector<std::vector<KmerSeedStruct>>().swap(kmer_by_owner);
+    std::vector<std::vector<int>>().swap(count_by_owner);
+    
+    // Allocate receive buffers
+    std::vector<KmerSeedStruct> recv_kmers(total_recv_kmers);
+    std::vector<int> recv_counts_flat(total_recv_kmers);
+    
+    // Create MPI datatype for KmerSeedStruct
+    MPI_Datatype kmer_type;
+    MPI_Type_contiguous(sizeof(KmerSeedStruct), MPI_BYTE, &kmer_type);
+    MPI_Type_commit(&kmer_type);
+    
+    // Exchange kmers and counts in a single operation
+    MPI_Alltoallv(
+        send_kmers.data(), send_counts.data(), send_displs.data(), kmer_type,
+        recv_kmers.data(), recv_counts.data(), recv_displs.data(), kmer_type,
+        MPI_COMM_WORLD
+    );
+    
+    // Exchange counts in a separate operation
+    MPI_Alltoallv(
+        send_counts_flat.data(), send_counts.data(), send_displs.data(), MPI_INT,
+        recv_counts_flat.data(), recv_counts.data(), recv_displs.data(), MPI_INT,
+        MPI_COMM_WORLD
+    );
+    
+    // Free MPI type
+    MPI_Type_free(&kmer_type);
+    
+    // Clear send buffers immediately
+    send_kmers.clear();
+    send_counts_flat.clear();
+    std::vector<KmerSeedStruct>().swap(send_kmers);
+    std::vector<int>().swap(send_counts_flat);
+    
+    // CRITICAL OPTIMIZATION 5: Ultra-fast final merging
+    // Use a direct array to hold results - much faster than unordered_map for merging
     std::unordered_map<KmerSeedStruct, int, KmerSeedHash> final_kmermap;
     final_kmermap.reserve(total_recv_kmers);
     
-    // Process received data with better memory access pattern
-    char* recv_ptr = recv_buffer.data();
-    for (size_t i = 0; i < total_recv_kmers; i++) {
-        // Extract k-mer
-        TKmer kmer;
-        memcpy(&kmer, recv_ptr, sizeof(TKmer));
-        recv_ptr += sizeof(TKmer);
-        
-        // Extract count
-        int count;
-        memcpy(&count, recv_ptr, sizeof(int));
-        recv_ptr += sizeof(int);
-        
-        // Add to final map
-        KmerSeedStruct kmerseed(kmer);
-        auto it = final_kmermap.find(kmerseed);
-        if (it == final_kmermap.end()) {
-            final_kmermap[kmerseed] = count;
-        } else {
-            it->second += count;
-        }
+    // Merge received data directly - avoid unnecessary copies
+    for (int i = 0; i < total_recv_kmers; i++) {
+        final_kmermap[recv_kmers[i]] += recv_counts_flat[i];
     }
     
-    // Free receive buffer memory
-    recv_buffer.clear();
-    std::vector<char>().swap(recv_buffer);
+    // Clear receive buffers
+    recv_kmers.clear();
+    recv_counts_flat.clear();
+    std::vector<KmerSeedStruct>().swap(recv_kmers);
+    std::vector<int>().swap(recv_counts_flat);
     
-    // Step 5: Build the final KmerList with efficient memory usage
+    // Build the final KmerList
     KmerList* kmerlist = new KmerList();
     kmerlist->reserve(final_kmermap.size());
     
@@ -525,332 +474,5 @@ std::unique_ptr<KmerList> count_kmer_mpi(const DnaBuffer& myreads)
         kmerlist->emplace_back(entry.first.kmer, entry.second);
     }
     
-    // Force memory release of the final map
-    final_kmermap.clear();
-    std::unordered_map<KmerSeedStruct, int, KmerSeedHash>().swap(final_kmermap);
-    
     return std::unique_ptr<KmerList>(kmerlist);
 }
-
-// std::unique_ptr<KmerList> count_kmer_mpi(const DnaBuffer& myreads)
-// {
-//     Timer timer;
-//     int rank, size;
-//     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-//     MPI_Comm_size(MPI_COMM_WORLD, &size);
-
-//     // CRITICAL OPTIMIZATION 1: Use direct hash table construction to reduce memory copies
-//     // Estimate size for hash table to avoid rehashing
-//     size_t total_bases = 0;
-//     for (size_t i = 0; i < myreads.size(); ++i) {
-//         total_bases += myreads[i].size();
-//     }
-//     size_t estimated_kmers = total_bases > KMER_SIZE ? total_bases - KMER_SIZE + 1 : 0;
-    
-//     // Use simple hash map based approach - often more efficient for MPI-heavy workloads
-//     std::unordered_map<KmerSeedStruct, int, KmerSeedHash> local_kmermap;
-//     local_kmermap.reserve(estimated_kmers / 2);  // Reserve conservatively
-    
-//     // Direct insertion without the overhead of handler indirection
-//     for (size_t i = 0; i < myreads.size(); ++i) {
-//         if (myreads[i].size() < KMER_SIZE)
-//             continue;
-        
-//         std::vector<TKmer> repmers = TKmer::GetRepKmers(myreads[i]);
-//         for (const auto& kmer : repmers) {
-//             KmerSeedStruct kmerseed(kmer);
-//             local_kmermap[kmerseed]++;
-//         }
-//     }
-
-//     // CRITICAL OPTIMIZATION 2: Minimize serialization overhead with flat structures
-//     // Create arrays for owner-based distribution - minimize hash lookups
-//     std::vector<std::vector<KmerSeedStruct>> kmer_by_owner(size);
-//     std::vector<std::vector<int>> count_by_owner(size);
-    
-//     for (int i = 0; i < size; i++) {
-//         // Pre-allocate to avoid resizing
-//         kmer_by_owner[i].reserve(local_kmermap.size() / size + 10);
-//         count_by_owner[i].reserve(local_kmermap.size() / size + 10);
-//     }
-    
-//     // Distribute kmers to owners with minimal overhead
-//     for (const auto& entry : local_kmermap) {
-//         int owner = GetKmerOwner(entry.first.kmer, size);
-//         kmer_by_owner[owner].push_back(entry.first);
-//         count_by_owner[owner].push_back(entry.second);
-//     }
-    
-//     // Clear local map to free memory immediately
-//     local_kmermap.clear();
-//     std::unordered_map<KmerSeedStruct, int, KmerSeedHash>().swap(local_kmermap);
-
-//     // CRITICAL OPTIMIZATION 3: Reduce MPI communication overhead
-//     // Get counts to send to each process
-//     std::vector<int> send_counts(size);
-//     for (int i = 0; i < size; i++) {
-//         send_counts[i] = kmer_by_owner[i].size();
-//     }
-    
-//     // Exchange counts
-//     std::vector<int> recv_counts(size);
-//     MPI_Alltoall(send_counts.data(), 1, MPI_INT, recv_counts.data(), 1, MPI_INT, MPI_COMM_WORLD);
-    
-//     // Calculate displacements for MPI_Alltoallv
-//     std::vector<int> send_displs(size, 0);
-//     std::vector<int> recv_displs(size, 0);
-    
-//     for (int i = 1; i < size; i++) {
-//         send_displs[i] = send_displs[i-1] + send_counts[i-1];
-//         recv_displs[i] = recv_displs[i-1] + recv_counts[i-1];
-//     }
-    
-//     // Calculate total receive size
-//     int total_recv_kmers = 0;
-//     for (int i = 0; i < size; i++) {
-//         total_recv_kmers += recv_counts[i];
-//     }
-    
-//     // CRITICAL OPTIMIZATION 4: Use separate sends for kmers and counts to avoid struct copies
-//     // Create flattened arrays for kmers and counts
-//     std::vector<KmerSeedStruct> send_kmers;
-//     std::vector<int> send_counts_flat;
-//     send_kmers.reserve(local_kmermap.size());
-//     send_counts_flat.reserve(local_kmermap.size());
-    
-//     for (int i = 0; i < size; i++) {
-//         send_kmers.insert(send_kmers.end(), kmer_by_owner[i].begin(), kmer_by_owner[i].end());
-//         send_counts_flat.insert(send_counts_flat.end(), count_by_owner[i].begin(), count_by_owner[i].end());
-        
-//         // Clear immediately to free memory
-//         std::vector<KmerSeedStruct>().swap(kmer_by_owner[i]);
-//         std::vector<int>().swap(count_by_owner[i]);
-//     }
-    
-//     // Clear the outer vectors
-//     std::vector<std::vector<KmerSeedStruct>>().swap(kmer_by_owner);
-//     std::vector<std::vector<int>>().swap(count_by_owner);
-    
-//     // Allocate receive buffers
-//     std::vector<KmerSeedStruct> recv_kmers(total_recv_kmers);
-//     std::vector<int> recv_counts_flat(total_recv_kmers);
-    
-//     // Create MPI datatype for KmerSeedStruct
-//     MPI_Datatype kmer_type;
-//     MPI_Type_contiguous(sizeof(KmerSeedStruct), MPI_BYTE, &kmer_type);
-//     MPI_Type_commit(&kmer_type);
-    
-//     // Exchange kmers and counts in a single operation
-//     MPI_Alltoallv(
-//         send_kmers.data(), send_counts.data(), send_displs.data(), kmer_type,
-//         recv_kmers.data(), recv_counts.data(), recv_displs.data(), kmer_type,
-//         MPI_COMM_WORLD
-//     );
-    
-//     // Exchange counts in a separate operation
-//     MPI_Alltoallv(
-//         send_counts_flat.data(), send_counts.data(), send_displs.data(), MPI_INT,
-//         recv_counts_flat.data(), recv_counts.data(), recv_displs.data(), MPI_INT,
-//         MPI_COMM_WORLD
-//     );
-    
-//     // Free MPI type
-//     MPI_Type_free(&kmer_type);
-    
-//     // Clear send buffers immediately
-//     send_kmers.clear();
-//     send_counts_flat.clear();
-//     std::vector<KmerSeedStruct>().swap(send_kmers);
-//     std::vector<int>().swap(send_counts_flat);
-    
-//     // CRITICAL OPTIMIZATION 5: Ultra-fast final merging
-//     // Use a direct array to hold results - much faster than unordered_map for merging
-//     std::unordered_map<KmerSeedStruct, int, KmerSeedHash> final_kmermap;
-//     final_kmermap.reserve(total_recv_kmers);
-    
-//     // Merge received data directly - avoid unnecessary copies
-//     for (int i = 0; i < total_recv_kmers; i++) {
-//         final_kmermap[recv_kmers[i]] += recv_counts_flat[i];
-//     }
-    
-//     // Clear receive buffers
-//     recv_kmers.clear();
-//     recv_counts_flat.clear();
-//     std::vector<KmerSeedStruct>().swap(recv_kmers);
-//     std::vector<int>().swap(recv_counts_flat);
-    
-//     // Build the final KmerList
-//     KmerList* kmerlist = new KmerList();
-//     kmerlist->reserve(final_kmermap.size());
-    
-//     for (const auto& entry : final_kmermap) {
-//         kmerlist->emplace_back(entry.first.kmer, entry.second);
-//     }
-    
-//     return std::unique_ptr<KmerList>(kmerlist);
-// }
-
-// std::unique_ptr<KmerList> count_kmer_mpi(const DnaBuffer& myreads)
-// {
-//     Timer timer;
-//     int rank, size;
-//     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-//     MPI_Comm_size(MPI_COMM_WORLD, &size);
-
-//     // Skip execution if only one process
-//     if (size == 1) {
-//         return count_kmer(myreads);
-//     }
-
-//     // OPTIMIZATION 1: Faster local hash map construction
-//     // Direct hash map without indirection or template overhead
-//     std::unordered_map<KmerSeedStruct, int, KmerSeedHash> local_kmermap;
-    
-//     // Pre-allocate with conservative estimate
-//     size_t total_bases = 0;
-//     for (size_t i = 0; i < myreads.size(); ++i) {
-//         if (myreads[i].size() >= KMER_SIZE) {
-//             total_bases += myreads[i].size();
-//         }
-//     }
-    
-//     if (total_bases > KMER_SIZE) {
-//         size_t estimated_kmers = (total_bases - KMER_SIZE + 1) / 4;
-//         local_kmermap.reserve(estimated_kmers);
-//     }
-    
-//     // Direct counting without handler indirection
-//     for (size_t i = 0; i < myreads.size(); ++i) {
-//         if (myreads[i].size() < KMER_SIZE)
-//             continue;
-        
-//         std::vector<TKmer> repmers = TKmer::GetRepKmers(myreads[i]);
-//         for (const auto& kmer : repmers) {
-//             KmerSeedStruct kmerseed(kmer);
-//             local_kmermap[kmerseed]++;
-//         }
-//     }
-
-//     // OPTIMIZATION 2: Use simplified owner assignment with modulo hash
-//     // Create direct arrays for each process
-//     std::vector<int> send_counts(size, 0);
-//     std::vector<std::vector<KmerSeedStruct>> kmer_by_rank(size);
-//     std::vector<std::vector<int>> count_by_rank(size);
-    
-//     // Count elements going to each rank first
-//     for (const auto& entry : local_kmermap) {
-//         int target_rank = GetKmerOwner(entry.first.kmer, size);
-//         send_counts[target_rank]++;
-//     }
-    
-//     // Pre-allocate with exact sizes
-//     for (int i = 0; i < size; i++) {
-//         kmer_by_rank[i].reserve(send_counts[i]);
-//         count_by_rank[i].reserve(send_counts[i]);
-//     }
-    
-//     // Distribute kmers to target ranks
-//     for (const auto& entry : local_kmermap) {
-//         int target_rank = GetKmerOwner(entry.first.kmer, size);
-//         kmer_by_rank[target_rank].push_back(entry.first);
-//         count_by_rank[target_rank].push_back(entry.second);
-//     }
-    
-//     // Free local map immediately
-//     local_kmermap.clear();
-//     std::unordered_map<KmerSeedStruct, int, KmerSeedHash>().swap(local_kmermap);
-    
-//     // OPTIMIZATION 3: More efficient communication pattern
-//     // Exchange element counts
-//     std::vector<int> recv_counts(size);
-//     MPI_Alltoall(send_counts.data(), 1, MPI_INT, recv_counts.data(), 1, MPI_INT, MPI_COMM_WORLD);
-    
-//     // Calculate displacements
-//     std::vector<int> send_displs(size, 0);
-//     std::vector<int> recv_displs(size, 0);
-    
-//     for (int i = 1; i < size; i++) {
-//         send_displs[i] = send_displs[i-1] + send_counts[i-1];
-//         recv_displs[i] = recv_displs[i-1] + recv_counts[i-1];
-//     }
-    
-//     // Calculate total receive counts
-//     int total_recv_kmers = 0;
-//     for (int i = 0; i < size; i++) {
-//         total_recv_kmers += recv_counts[i];
-//     }
-    
-//     // Prepare for communication
-//     // For KmerSeedStruct
-//     MPI_Datatype kmer_seed_type;
-//     MPI_Type_contiguous(sizeof(KmerSeedStruct), MPI_BYTE, &kmer_seed_type);
-//     MPI_Type_commit(&kmer_seed_type);
-    
-//     // OPTIMIZATION 4: Single buffer transfers
-//     // Create flattened send arrays
-//     std::vector<KmerSeedStruct> send_kmers;
-//     std::vector<int> send_counts_flat;
-    
-//     for (int i = 0; i < size; i++) {
-//         send_kmers.insert(send_kmers.end(), kmer_by_rank[i].begin(), kmer_by_rank[i].end());
-//         send_counts_flat.insert(send_counts_flat.end(), count_by_rank[i].begin(), count_by_rank[i].end());
-        
-//         // Free memory immediately
-//         std::vector<KmerSeedStruct>().swap(kmer_by_rank[i]);
-//         std::vector<int>().swap(count_by_rank[i]);
-//     }
-    
-//     // Clear parent vectors
-//     std::vector<std::vector<KmerSeedStruct>>().swap(kmer_by_rank);
-//     std::vector<std::vector<int>>().swap(count_by_rank);
-    
-//     // Allocate receive buffers
-//     std::vector<KmerSeedStruct> recv_kmers(total_recv_kmers);
-//     std::vector<int> recv_counts_flat(total_recv_kmers);
-    
-//     // Transfer data
-//     MPI_Alltoallv(
-//         send_kmers.data(), send_counts.data(), send_displs.data(), kmer_seed_type,
-//         recv_kmers.data(), recv_counts.data(), recv_displs.data(), kmer_seed_type,
-//         MPI_COMM_WORLD
-//     );
-    
-//     MPI_Alltoallv(
-//         send_counts_flat.data(), send_counts.data(), send_displs.data(), MPI_INT,
-//         recv_counts_flat.data(), recv_counts.data(), recv_displs.data(), MPI_INT,
-//         MPI_COMM_WORLD
-//     );
-    
-//     // Free datatype and send buffers
-//     MPI_Type_free(&kmer_seed_type);
-//     send_kmers.clear();
-//     send_counts_flat.clear();
-//     std::vector<KmerSeedStruct>().swap(send_kmers);
-//     std::vector<int>().swap(send_counts_flat);
-    
-//     // OPTIMIZATION 5: Fast final merging
-//     // Final map with perfect sizing
-//     std::unordered_map<KmerSeedStruct, int, KmerSeedHash> final_kmermap;
-//     final_kmermap.reserve(total_recv_kmers);
-    
-//     // Merge with direct insertion
-//     for (int i = 0; i < total_recv_kmers; i++) {
-//         final_kmermap[recv_kmers[i]] += recv_counts_flat[i];
-//     }
-    
-//     // Free receive buffers
-//     recv_kmers.clear();
-//     recv_counts_flat.clear();
-//     std::vector<KmerSeedStruct>().swap(recv_kmers);
-//     std::vector<int>().swap(recv_counts_flat);
-    
-//     // Build final KmerList
-//     KmerList* kmerlist = new KmerList();
-//     kmerlist->reserve(final_kmermap.size());
-    
-//     for (const auto& entry : final_kmermap) {
-//         kmerlist->emplace_back(entry.first.kmer, entry.second);
-//     }
-    
-//     return std::unique_ptr<KmerList>(kmerlist);
-// }
