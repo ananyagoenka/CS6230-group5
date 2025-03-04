@@ -19,4 +19,4 @@ export OMP_PLACES=threads
 export OMP_PROC_BIND=spread
 
 # Run the serial K-mer counter (no MPI, no OpenMP)
-srun -n 1 -c 256 --cpu_bind=cores ./kcount $KCOUNT_DATASET_PATH serial
+srun -n 1 -c 1 --cpu_bind=cores ./kcount $KCOUNT_DATASET_PATH serial
