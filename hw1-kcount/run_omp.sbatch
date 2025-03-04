@@ -7,7 +7,8 @@
 #SBATCH --mail-type=ALL
 #SBATCH -t 00:10:00
 
-#OpenMP settings:
+
+# #OpenMP settings:
 
 module load PrgEnv-gnu
 
@@ -19,7 +20,4 @@ export OMP_PROC_BIND=spread
 
 # Run the OpenMP K-mer counter with proper CPU binding
 srun -n 1 -c 256 --cpu_bind=cores ./kcount $KCOUNT_DATASET_PATH omp
-
-
-
 
