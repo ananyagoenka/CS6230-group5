@@ -8,17 +8,15 @@
 #SBATCH -t 00:10:00           
 #SBATCH -A m4341           
 
-# Set dataset path
+#MODIFY THE DATASET PATH TO RUN ON A DIFFERENT DATASET
 export KCOUNT_DATASET_PATH="/global/homes/a/asyam/CS6230-group5/hw1-kcount/sample_input/reads.fa"
 
 module load gcc-native/13.2
 
-# Set the implementation to MPI
 export KMER_IMPL=mpi
 
 export OMP_NUM_THREADS=1
 export OMP_PLACES=threads
-export OMP_PROC_BIND=spread
+export OMP_PROC_BIND=close
 
-# Run the MPI K-mer counter
-srun -n 128 -c 8 --cpu_bind=cores ./kcount $KCOUNT_DATASET_PATH 
+srun -n 64 -c 16 --cpu_bind=cores ./kcount $KCOUNT_DATASET_PATH 
