@@ -152,35 +152,41 @@ std::unique_ptr<KmerList> count_kmer_omp(const DnaBuffer& myreads)
     #pragma omp parallel reduction(+:total_bases)
     {
         #pragma omp for schedule(static)
-        for (size_t i = 0; i < myreads.size(); ++i) {
+        for (size_t i = 0; i < myreads.size(); i++) {
             if (myreads[i].size() >= KMER_SIZE) {
                 total_bases += myreads[i].size();
             }
         }
     }
     
-    size_t estimated_kmers = total_bases > KMER_SIZE ? total_bases - KMER_SIZE + 1 : 0;
+    size_t estimated_kmers;
+    if (total_bases > KMER_SIZE) {
+        estimated_kmers = total_bases - KMER_SIZE + 1;
+    } else {
+        estimated_kmers = 0;
+    }
+
     size_t kmers_per_thread = (estimated_kmers / num_threads) * 1.1 + 100;
     
     #pragma omp parallel
     {
-        int tid = omp_get_thread_num();
-        thread_kmers[tid].reserve(kmers_per_thread);
+        int thread_id = omp_get_thread_num();
+        thread_kmers[thread_id].reserve(kmers_per_thread);
     }
     
     #pragma omp parallel
     {
-        int tid = omp_get_thread_num();
+        int thread_id = omp_get_thread_num();
         
         #pragma omp for schedule(dynamic, 64)
-        for (size_t i = 0; i < myreads.size(); ++i) {
+        for (size_t i = 0; i < myreads.size(); i++) {
             if (myreads[i].size() < KMER_SIZE)
                 continue;
                 
             std::vector<TKmer> repmers = TKmer::GetRepKmers(myreads[i]);
             
             for (auto& kmer : repmers) {
-                thread_kmers[tid].emplace_back(kmer);
+                thread_kmers[thread_id].emplace_back(kmer);
             }
         }
     }
@@ -195,14 +201,14 @@ std::unique_ptr<KmerList> count_kmer_omp(const DnaBuffer& myreads)
     
     std::vector<size_t> offsets(num_threads + 1, 0);
     
-    for (int i = 0; i < num_threads; ++i) {
+    for (int i = 0; i < num_threads; i++) {
         offsets[i+1] = offsets[i] + thread_kmers[i].size();
     }
     
     kmerseeds->resize(total_kmers);
     
     #pragma omp parallel for schedule(static)
-    for (int i = 0; i < num_threads; ++i) {
+    for (int i = 0; i < num_threads; i++) {
         if (!thread_kmers[i].empty()) {
             std::copy(
                 thread_kmers[i].begin(),
@@ -234,10 +240,10 @@ std::unique_ptr<KmerList> count_kmer_omp(const DnaBuffer& myreads)
         auto pivot = *(end - 1);
         
         auto i = begin;
-        for (auto j = begin; j < end - 1; ++j) {
+        for (auto j = begin; j < end - 1; j++) {
             if (*j < pivot) {
                 std::iter_swap(i, j);
-                ++i;
+                i++;
             }
         }
         std::iter_swap(i, end - 1);
@@ -299,15 +305,22 @@ std::unique_ptr<KmerList> count_kmer_mpi(const DnaBuffer& myreads)
 
     
     size_t total_bases = 0;
-    for (size_t i = 0; i < myreads.size(); ++i) {
+    for (size_t i = 0; i < myreads.size(); i++) {
         total_bases += myreads[i].size();
     }
-    size_t estimated_kmers = total_bases > KMER_SIZE ? total_bases - KMER_SIZE + 1 : 0;
+
+    size_t estimated_kmers;
+    if (total_bases > KMER_SIZE) {
+        estimated_kmers = total_bases - KMER_SIZE + 1;
+    } else {
+        estimated_kmers = 0;
+    }
+
     
     std::unordered_map<KmerSeedStruct, int, KmerSeedHash> local_kmermap;
     local_kmermap.reserve(estimated_kmers / 2);  
     
-    for (size_t i = 0; i < myreads.size(); ++i) {
+    for (size_t i = 0; i < myreads.size(); i++) {
         if (myreads[i].size() < KMER_SIZE)
             continue;
         
@@ -352,9 +365,9 @@ std::unique_ptr<KmerList> count_kmer_mpi(const DnaBuffer& myreads)
         recv_displs[i] = recv_displs[i-1] + recv_counts[i-1];
     }
     
-    int total_recv_kmers = 0;
+    int total_received_kmers = 0;
     for (int i = 0; i < size; i++) {
-        total_recv_kmers += recv_counts[i];
+        total_received_kmers += recv_counts[i];
     }
     
     
@@ -374,8 +387,8 @@ std::unique_ptr<KmerList> count_kmer_mpi(const DnaBuffer& myreads)
     std::vector<std::vector<KmerSeedStruct>>().swap(kmer_by_owner);
     std::vector<std::vector<int>>().swap(count_by_owner);
     
-    std::vector<KmerSeedStruct> recv_kmers(total_recv_kmers);
-    std::vector<int> recv_counts_flat(total_recv_kmers);
+    std::vector<KmerSeedStruct> recv_kmers(total_received_kmers);
+    std::vector<int> recv_counts_flat(total_received_kmers);
     
     MPI_Datatype kmer_type;
     MPI_Type_contiguous(sizeof(KmerSeedStruct), MPI_BYTE, &kmer_type);
@@ -401,9 +414,9 @@ std::unique_ptr<KmerList> count_kmer_mpi(const DnaBuffer& myreads)
     std::vector<int>().swap(send_counts_flat);
     
     std::unordered_map<KmerSeedStruct, int, KmerSeedHash> final_kmermap;
-    final_kmermap.reserve(total_recv_kmers);
+    final_kmermap.reserve(total_received_kmers);
     
-    for (int i = 0; i < total_recv_kmers; i++) {
+    for (int i = 0; i < total_received_kmers; i++) {
         final_kmermap[recv_kmers[i]] += recv_counts_flat[i];
     }
     

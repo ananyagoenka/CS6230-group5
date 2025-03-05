@@ -14,6 +14,7 @@ export KCOUNT_DATASET_PATH="/global/homes/a/asyam/CS6230-group5/hw1-kcount/sampl
 module load gcc-native/13.2
 
 export KMER_IMPL=mpi
+export MPICH_MPIIO_DVS_MAXNODES=1
 
 export OMP_NUM_THREADS=1
 export OMP_PLACES=threads

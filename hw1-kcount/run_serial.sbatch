@@ -10,13 +10,14 @@
 #SBATCH -A m4341
 #SBATCH -q debug
 
+#MODIFY THE DATASET PATH TO RUN ON A DIFFERENT DATASET
+export KCOUNT_DATASET_PATH="/global/homes/a/asyam/CS6230-group5/hw1-kcount/sample_input/reads.fa"
+
 module load PrgEnv-gnu
 module load gcc-native/13.2
 
 export KMER_IMPL=serial
-
-#MODIFY THE DATASET PATH TO RUN ON A DIFFERENT DATASET
-export KCOUNT_DATASET_PATH="/global/homes/a/asyam/CS6230-group5/hw1-kcount/sample_input/reads.fa"
+export MPICH_MPIIO_DVS_MAXNODES=1
 
 export OMP_NUM_THREADS=1
 export OMP_PLACES=threads
