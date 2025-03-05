@@ -331,18 +331,18 @@ std::unique_ptr<KmerList> count_kmer_mpi(const DnaBuffer& myreads)
         }
     }
     
-    std::vector<std::vector<KmerSeedStruct>> kmer_by_owner(size);
-    std::vector<std::vector<int>> count_by_owner(size);
+    std::vector<std::vector<KmerSeedStruct>> ownerwise_kmer(size);
+    std::vector<std::vector<int>> ownerwise_count(size);
     
     for (int i = 0; i < size; i++) {
-        kmer_by_owner[i].reserve(local_kmermap.size() / size + 10);
-        count_by_owner[i].reserve(local_kmermap.size() / size + 10);
+        ownerwise_kmer[i].reserve(local_kmermap.size() / size + 10);
+        ownerwise_count[i].reserve(local_kmermap.size() / size + 10);
     }
     
     for (const auto& entry : local_kmermap) {
         int owner = GetKmerOwner(entry.first.kmer, size);
-        kmer_by_owner[owner].push_back(entry.first);
-        count_by_owner[owner].push_back(entry.second);
+        ownerwise_kmer[owner].push_back(entry.first);
+        ownerwise_count[owner].push_back(entry.second);
     }
     
     local_kmermap.clear();
@@ -351,7 +351,7 @@ std::unique_ptr<KmerList> count_kmer_mpi(const DnaBuffer& myreads)
     
     std::vector<int> send_counts(size);
     for (int i = 0; i < size; i++) {
-        send_counts[i] = kmer_by_owner[i].size();
+        send_counts[i] = ownerwise_kmer[i].size();
     }
     
     std::vector<int> recv_counts(size);
@@ -377,17 +377,17 @@ std::unique_ptr<KmerList> count_kmer_mpi(const DnaBuffer& myreads)
     send_counts_flat.reserve(local_kmermap.size());
     
     for (int i = 0; i < size; i++) {
-        send_kmers.insert(send_kmers.end(), kmer_by_owner[i].begin(), kmer_by_owner[i].end());
-        send_counts_flat.insert(send_counts_flat.end(), count_by_owner[i].begin(), count_by_owner[i].end());
+        send_kmers.insert(send_kmers.end(), ownerwise_kmer[i].begin(), ownerwise_kmer[i].end());
+        send_counts_flat.insert(send_counts_flat.end(), ownerwise_count[i].begin(), ownerwise_count[i].end());
         
-        std::vector<KmerSeedStruct>().swap(kmer_by_owner[i]);
-        std::vector<int>().swap(count_by_owner[i]);
+        std::vector<KmerSeedStruct>().swap(ownerwise_kmer[i]);
+        std::vector<int>().swap(ownerwise_count[i]);
     }
     
-    std::vector<std::vector<KmerSeedStruct>>().swap(kmer_by_owner);
-    std::vector<std::vector<int>>().swap(count_by_owner);
+    std::vector<std::vector<KmerSeedStruct>>().swap(ownerwise_kmer);
+    std::vector<std::vector<int>>().swap(ownerwise_count);
     
-    std::vector<KmerSeedStruct> recv_kmers(total_received_kmers);
+    std::vector<KmerSeedStruct> received_kmers(total_received_kmers);
     std::vector<int> recv_counts_flat(total_received_kmers);
     
     MPI_Datatype kmer_type;
@@ -396,7 +396,7 @@ std::unique_ptr<KmerList> count_kmer_mpi(const DnaBuffer& myreads)
     
     MPI_Alltoallv(
         send_kmers.data(), send_counts.data(), send_displs.data(), kmer_type,
-        recv_kmers.data(), recv_counts.data(), recv_displs.data(), kmer_type,
+        received_kmers.data(), recv_counts.data(), recv_displs.data(), kmer_type,
         MPI_COMM_WORLD
     );
     
@@ -417,12 +417,12 @@ std::unique_ptr<KmerList> count_kmer_mpi(const DnaBuffer& myreads)
     final_kmermap.reserve(total_received_kmers);
     
     for (int i = 0; i < total_received_kmers; i++) {
-        final_kmermap[recv_kmers[i]] += recv_counts_flat[i];
+        final_kmermap[received_kmers[i]] += recv_counts_flat[i];
     }
     
-    recv_kmers.clear();
+    received_kmers.clear();
     recv_counts_flat.clear();
-    std::vector<KmerSeedStruct>().swap(recv_kmers);
+    std::vector<KmerSeedStruct>().swap(received_kmers);
     std::vector<int>().swap(recv_counts_flat);
     
     KmerList* kmerlist = new KmerList();
