@@ -1,1 +1,0 @@
-/usr/bin/g++ @CMakeFiles/test_spmv.dir/objects1.rsp -o test_spmv @CMakeFiles/test_spmv.dir/linkLibs.rsp -L"/opt/nvidia/hpc_sdk/Linux_x86_64/24.5/cuda/12.4/targets/x86_64-linux/lib/stubs" -L"/opt/nvidia/hpc_sdk/Linux_x86_64/24.5/cuda/12.4/targets/x86_64-linux/lib"

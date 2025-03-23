@@ -1,8 +1,0 @@
-[
-{
-  "directory": "/global/homes/a/ananyag/CS6230-group5/hw2-spmv/build",
-  "command": "/opt/nvidia/hpc_sdk/Linux_x86_64/24.5/cuda/12.4/bin/nvcc -forward-unknown-to-host-compiler  --options-file CMakeFiles/test_spmv.dir/includes_CUDA.rsp -std=c++17 \"--generate-code=arch=compute_80,code=[compute_80,sm_80]\" -w -O3 --use_fast_math -x cu -c /global/homes/a/ananyag/CS6230-group5/hw2-spmv/tests/test_spmv.cu -o CMakeFiles/test_spmv.dir/tests/test_spmv.cu.o",
-  "file": "/global/homes/a/ananyag/CS6230-group5/hw2-spmv/tests/test_spmv.cu",
-  "output": "CMakeFiles/test_spmv.dir/tests/test_spmv.cu.o"
-}
-]
