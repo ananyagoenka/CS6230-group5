@@ -1,0 +1,10 @@
+Reading in ../matrices/stomach/stomach.mtx
+Done!
+Running correctness check../matrices/stomach/stomach.mtx
+Correctness for SpMV passed!
+Running cusparse benchmark../matrices/stomach/stomach.mtx
+[SpMV_cusparse]: 0.00545283s
+[SpMV_cusparse]: 110 gflops/s
+Running student benchmark../matrices/stomach/stomach.mtx
+[SpMV_student]: 0.00436912s
+[SpMV_student]: 138 gflops/s

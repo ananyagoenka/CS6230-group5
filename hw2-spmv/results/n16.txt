@@ -1,0 +1,10 @@
+Reading in ../matrices/n16.mtx
+Done!
+Running correctness check../matrices/n16.mtx
+Correctness for SpMV passed!
+Running cusparse benchmark../matrices/n16.mtx
+[SpMV_cusparse]: 0.000931904s
+[SpMV_cusparse]: 0 gflops/s
+Running student benchmark../matrices/n16.mtx
+[SpMV_student]: 0.000902912s
+[SpMV_student]: 0 gflops/s

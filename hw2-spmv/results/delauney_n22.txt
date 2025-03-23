@@ -1,0 +1,11 @@
+Reading in ../matrices/delaunay_n22/delaunay_n22.mtx
+Matrix is symmetric
+Done!
+Running correctness check../matrices/delaunay_n22/delaunay_n22.mtx
+Correctness for SpMV passed!
+Running cusparse benchmark../matrices/delaunay_n22/delaunay_n22.mtx
+[SpMV_cusparse]: 0.011817s
+[SpMV_cusparse]: 212 gflops/s
+Running student benchmark../matrices/delaunay_n22/delaunay_n22.mtx
+[SpMV_student]: 0.0138124s
+[SpMV_student]: 182 gflops/s
