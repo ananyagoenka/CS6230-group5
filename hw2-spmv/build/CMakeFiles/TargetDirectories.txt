@@ -1,0 +1,3 @@
+/global/homes/a/ananyag/CS6230-group5/hw2-spmv/build/CMakeFiles/test_spmv.dir
+/global/homes/a/ananyag/CS6230-group5/hw2-spmv/build/CMakeFiles/edit_cache.dir
+/global/homes/a/ananyag/CS6230-group5/hw2-spmv/build/CMakeFiles/rebuild_cache.dir
