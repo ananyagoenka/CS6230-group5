@@ -1,8 +1,0 @@
-Running SpMV benchmark on matrix: /global/homes/a/asyam/CS6230-group5/hw2-spmv/matrices/delaunay_n22/delaunay_n22.mtx
-[33mReading in /global/homes/a/asyam/CS6230-group5/hw2-spmv/matrices/delaunay_n22/delaunay_n22.mtx[0m
-Matrix is symmetric
-[32mDone![0m
-[33mRunning correctness check/global/homes/a/asyam/CS6230-group5/hw2-spmv/matrices/delaunay_n22/delaunay_n22.mtx[0m
-[31mError: got -3.93633e+09 expected -3.93633e+09[0m
-srun: error: nid002041: task 0: Exited with exit code 1
-srun: Terminating StepId=37153363.0

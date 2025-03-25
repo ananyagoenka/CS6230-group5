@@ -1,7 +1,0 @@
-
-Lmod is automatically replacing "cudatoolkit/12.4" with "cuda/11.7".
-
-Running SpMV benchmark on matrix: /global/homes/a/asyam/CS6230-group5/hw2-spmv/matrices/stomach/stomach.mtx
-slurmstepd: error: execve(): /global/u1/a/asyam/CS6230-group5/hw2-spmv/./test_spmv: No such file or directory
-srun: error: nid001141: task 0: Exited with exit code 2
-srun: Terminating StepId=37148081.0
