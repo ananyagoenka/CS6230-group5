@@ -1,0 +1,5 @@
+Running SpMV benchmark on matrix: /global/homes/a/asyam/CS6230-group5/hw2-spmv/matrices/stomach/stomach.mtx
+[33mReading in /global/homes/a/asyam/CS6230-group5/hw2-spmv/matrices/stomach/stomach.mtx[0m
+CUDA Error: invalid argument (/global/homes/a/asyam/CS6230-group5/hw2-spmv/include/CSR.hpp:158)
+srun: error: nid001772: task 0: Exited with exit code 1
+srun: Terminating StepId=37152775.0

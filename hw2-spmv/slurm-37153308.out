@@ -1,0 +1,11 @@
+Running SpMV benchmark on matrix: /global/homes/a/asyam/CS6230-group5/hw2-spmv/matrices/n16.mtx
+[33mReading in /global/homes/a/asyam/CS6230-group5/hw2-spmv/matrices/n16.mtx[0m
+[32mDone![0m
+[33mRunning correctness check/global/homes/a/asyam/CS6230-group5/hw2-spmv/matrices/n16.mtx[0m
+[32mCorrectness for SpMV passed![0m
+[33mRunning cusparse benchmark/global/homes/a/asyam/CS6230-group5/hw2-spmv/matrices/n16.mtx[0m
+[91m[SpMV_cusparse]: 0.000733184s[0m
+[94m[SpMV_cusparse]: 0 gflops/s[0m
+[33mRunning student benchmark/global/homes/a/asyam/CS6230-group5/hw2-spmv/matrices/n16.mtx[0m
+[91m[SpMV_student]: 0.000785216s[0m
+[94m[SpMV_student]: 0 gflops/s[0m
