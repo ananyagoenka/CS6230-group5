@@ -24,6 +24,4 @@ export MATRIX_PATH="/global/homes/a/asyam/CS6230-group5/hw2-spmv/matrices/n16.mt
 module load PrgEnv-gnu
 module load cudatoolkit/12.4 
 
-echo "Running SpMV benchmark on matrix: $MATRIX_PATH"
-
 srun -n 1 -c 1 --cpu_bind=cores ./test_spmv $MATRIX_PATH
