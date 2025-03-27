@@ -12,13 +12,13 @@
 
 # Choose/modify the path below to point to desired matrix
 #n16 matrix
-export MATRIX_PATH="/global/homes/a/asyam/CS6230-group5/hw2-spmv/matrices/n16.mtx"
+# export MATRIX_PATH="/global/homes/a/asyam/CS6230-group5/hw2-spmv/matrices/n16.mtx"
 
 #stomach matrix
 # export MATRIX_PATH="/global/homes/a/asyam/CS6230-group5/hw2-spmv/matrices/stomach/stomach.mtx"
 
 #n22 delaunay matrix
-# export MATRIX_PATH="/global/homes/a/asyam/CS6230-group5/hw2-spmv/matrices/delaunay_n22/delaunay_n22.mtx"
+export MATRIX_PATH="/global/homes/a/asyam/CS6230-group5/hw2-spmv/matrices/delaunay_n22/delaunay_n22.mtx"
 
 # Load required modules
 module load PrgEnv-gnu
