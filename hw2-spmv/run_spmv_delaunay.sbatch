@@ -10,18 +10,13 @@
 #SBATCH -A m4341_g                     
 #SBATCH -q debug                      
 
-# Choose/modify the path below to point to desired matrix
-#n16 matrix
-# export MATRIX_PATH="/global/homes/a/asyam/CS6230-group5/hw2-spmv/matrices/n16.mtx"
-
-#stomach matrix
-# export MATRIX_PATH="/global/homes/a/asyam/CS6230-group5/hw2-spmv/matrices/stomach/stomach.mtx"
+# Modify the path below to point to desired matrix
 
 #n22 delaunay matrix
 export MATRIX_PATH="/global/homes/a/asyam/CS6230-group5/hw2-spmv/matrices/delaunay_n22/delaunay_n22.mtx"
 
 # Load required modules
 module load PrgEnv-gnu
-module load cudatoolkit/12.4 
+module load cudatoolkit/12.4 #used this version for CUDA due to version mismatch errors while submitting sbatch scripts, may have to change in case of version issues
 
 srun -n 1 -c 1 --cpu_bind=cores ./test_spmv $MATRIX_PATH
