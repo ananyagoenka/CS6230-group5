@@ -25,16 +25,13 @@ namespace spmv
                          float *d_vals, uint32_t *d_colinds, uint32_t *d_rowptrs,
                          __constant__ float *d_x, float *d_y)
     {
-        // Each thread computes one row of the output vector.
         size_t row = blockIdx.x * blockDim.x + threadIdx.x;
         if (row < m)
         {
             float sum = 0.0f;
-            // Get the start and end indices for the nonzero values in this row.
             uint32_t row_start = d_rowptrs[row];
             uint32_t row_end = d_rowptrs[row + 1];
 
-            // Accumulate the dot product for this row.
             for (uint32_t j = row_start; j < row_end; j++)
             {
                 sum += d_vals[j] * d_x[d_colinds[j]];
@@ -59,7 +56,6 @@ namespace spmv
      */
     void SpMV_wrapper(CSR<float, uint32_t> &A, float *d_x, float *d_y)
     {
-        //**** CHANGE THESE VALUES ****//
         uint32_t threads_per_block = 256;
         uint32_t blocks = (A.get_rows() + threads_per_block - 1) / threads_per_block;
         // Call the kernel
