@@ -205,7 +205,15 @@ comptime {
   @initialize_queue(west_iq,  .{ .color = west_rx });
 
   // HW1.1: Create the correct routing table
-  // @set_local_color_config(north_tx, .{ .routes = .{ ... }});
+
+  @set_local_color_config(north_tx, .{ .routes = .["NORTH"] });
+  @set_local_color_config(north_rx, .{ .routes = .["NORTH"] });
+  @set_local_color_config(south_tx, .{ .routes = .["SOUTH"] });
+  @set_local_color_config(south_rx, .{ .routes = .["SOUTH"] });
+  @set_local_color_config(east_tx, .{ .routes = .["EAST"] });
+  @set_local_color_config(east_rx, .{ .routes = .["EAST"] });
+  @set_local_color_config(west_tx, .{ .routes = .["WEST"] });
+  @set_local_color_config(west_rx, .{ .routes = .["WEST"] });
 }
 
 // RPC
