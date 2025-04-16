@@ -1,0 +1,29 @@
+@0 GITREV=df432627bb654094529d1833ff61374cc6918893, GITCLEAN=1
+@0 Create from elfs
+@0 dimX=10, dimY=4
+@0 Reading ELF file out/generated/default.elf
+@0 Reading ELF file out/generated/coord.elf
+@0 Reading ELF file out/bin/out_0_0.elf
+@0 Reading ELF file out/bin/out_3_0.elf
+@0 Reading ELF file out/bin/out_1_0.elf
+@0 Reading ELF file out/bin/out_2_0.elf
+@0 Reading ELF file out/east/bin/out_0_0.elf
+@0 Reading ELF file out/east/bin/out_3_0.elf
+@0 Reading ELF file out/east/bin/out_1_0.elf
+@0 Reading ELF file out/east/bin/out_2_0.elf
+@0 Reading ELF file out/west/bin/out_0_0.elf
+@0 Reading ELF file out/west/bin/out_3_0.elf
+@0 Reading ELF file out/west/bin/out_5_0.elf
+@0 Reading ELF file out/west/bin/out_4_0.elf
+@0 Reading ELF file out/west/bin/out_1_0.elf
+@0 Reading ELF file out/west/bin/out_2_0.elf
+@0 Reading ELF file out/generated/MEMCPY_XY_ROUTES.elf
+@0 Invocation key is: sim737ADC55468ADB47B00812711C944C9B
+@0 Plan key is: planFFDFCEDCF924862656A049FD944D8CDF
+@0 Architecture is: SDR
+@0 Simtile is: hwtile
+@0 Sim stats: config-time=0.02, nodes=1, threads=8
+@0 Sim stats: tiles=68, simulated_tiles=23, hwtile=19, iotile=4, nultile=45
+@70153 Stopping due to user request
+@70153 19750 cycles since an instruction was executed, 19787 cycles since a wavelet landed
+@70153 Simulation used 3.82 seconds, init-time=0.02, total-time=3.84, cycles=70153, cyc/sec=18375.50, tile-cyc/sec=422636.56, tile-cyc/sec-thread=52829.57

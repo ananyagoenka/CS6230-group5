@@ -1,0 +1,49 @@
+{
+  "rpc_symbols": [
+    {
+      "id": 6,
+      "kind": "Func",
+      "name": "f_step",
+      "sym_name": "f_step",
+      "type": "void"
+    },
+    {
+      "id": 5,
+      "kind": "Func",
+      "name": "f_sync",
+      "sym_name": "f_sync",
+      "type": "void"
+    },
+    {
+      "id": 4,
+      "kind": "Func",
+      "name": "f_init",
+      "sym_name": "f_init",
+      "type": "void"
+    },
+    {
+      "id": 1,
+      "immutable": 0,
+      "kind": "Var",
+      "name": "data",
+      "sym_name": "ptr_data",
+      "type": "[*]u32"
+    },
+    {
+      "id": 2,
+      "immutable": 0,
+      "kind": "Var",
+      "name": "tsc_t0",
+      "sym_name": "ptr_tsc_start",
+      "type": "[*]u16"
+    },
+    {
+      "id": 3,
+      "immutable": 0,
+      "kind": "Var",
+      "name": "tsc_t1",
+      "sym_name": "ptr_tsc_end",
+      "type": "[*]u16"
+    }
+  ]
+}
