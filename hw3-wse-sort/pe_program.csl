@@ -161,15 +161,40 @@ task col_sort() void {
   }
 
   var tmp: u32;
-  for (@range(u16, 0, dx, 1)) |r| {
+  for (@range(u16, 0, dx, 1)) |c| {
     // HW2.0: Implement the communication here
+    // TX
+    if (!border_north) {
+      @mov32(dsd_north_tx, data[0, c]);
+    }
+    if (!border_south) {
+      @mov32(dsd_south_tx, data[dy-1, c]);
+    }
+    
+    // RX
+    if (!border_north) {
+      @mov32(&tmp, dsd_north_rx);
+      var a = data[0, c];
+      if (tmp < a) {
+        data[0, c] = tmp;
+      }
+    }
+    if (!border_south) {
+      @mov32(&tmp, dsd_south_rx);
+      var a = data[dy-1, c];
+      if (tmp > a) {
+        data[dy-1, c] = tmp;
+      }
+    }
   }
 
   // HW2.1: Must be removed after HW2.1 because row_sort
   // is last taskt to be invoked and is already present
   // at the end of row_sort.
-  sys_mod.unblock_cmd_stream(); 
+  // sys_mod.unblock_cmd_stream(); 
   // HW2.1: Invoke the row_sort local_task here
+  @activate(row_sort_task_id);
+
 }
 
 comptime {
