@@ -233,12 +233,16 @@ comptime {
 
   @set_local_color_config(north_tx, .{ .routes = .{ .tx = .{ NORTH } } });
   @set_local_color_config(north_rx, .{ .routes = .{ .rx = .{ NORTH } } });
+  
   @set_local_color_config(south_tx, .{ .routes = .{ .tx = .{ SOUTH } } });
   @set_local_color_config(south_rx, .{ .routes = .{ .rx = .{ SOUTH } } });
+  
   @set_local_color_config(east_tx, .{ .routes = .{ .tx = .{ EAST } } });
   @set_local_color_config(east_rx, .{ .routes = .{ .rx = .{ EAST } } });
+  
   @set_local_color_config(west_tx, .{ .routes = .{ .tx = .{ WEST } } });
   @set_local_color_config(west_rx, .{ .routes = .{ .rx = .{ WEST } } });
+
 
 }
 
