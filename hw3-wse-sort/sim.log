@@ -18,10 +18,10 @@
 @0 Reading ELF file out/west/bin/out_1_0.elf
 @0 Reading ELF file out/west/bin/out_2_0.elf
 @0 Reading ELF file out/generated/MEMCPY_XY_ROUTES.elf
-@0 Invocation key is: simCD09E373BA0A6D446A7A30B1809D52A9
+@0 Invocation key is: sim8B9ACEEA050AF280B68AD4A321246709
 @0 Plan key is: planFFDFCEDCF924862656A049FD944D8CDF
 @0 Architecture is: SDR
 @0 Simtile is: hwtile
 @0 Sim stats: config-time=0.02, nodes=1, threads=8
 @0 Sim stats: tiles=68, simulated_tiles=23, hwtile=19, iotile=4, nultile=45
-@23004 Stopping due to fatal error
+@22996 Stopping due to fatal error

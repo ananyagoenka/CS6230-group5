@@ -231,18 +231,31 @@ comptime {
 
   // HW1.1: Create the correct routing table
 
-  @set_local_color_config(north_tx, .{ .routes = .{ .tx = .{ NORTH } } });
-  @set_local_color_config(north_rx, .{ .routes = .{ .rx = .{ NORTH } } });
+  // North-South routes
+  const north_tx_route = .{ .rx = .{ RAMP }, .tx = .{ NORTH } };
+  @set_local_color_config(north_tx, .{ .routes = north_tx_route });
   
-  @set_local_color_config(south_tx, .{ .routes = .{ .tx = .{ SOUTH } } });
-  @set_local_color_config(south_rx, .{ .routes = .{ .rx = .{ SOUTH } } });
+  const north_rx_route = .{ .rx = .{ NORTH }, .tx = .{ RAMP } };
+  @set_local_color_config(north_rx, .{ .routes = north_rx_route });
   
-  @set_local_color_config(east_tx, .{ .routes = .{ .tx = .{ EAST } } });
-  @set_local_color_config(east_rx, .{ .routes = .{ .rx = .{ EAST } } });
+  const south_tx_route = .{ .rx = .{ RAMP }, .tx = .{ SOUTH } };
+  @set_local_color_config(south_tx, .{ .routes = south_tx_route });
   
-  @set_local_color_config(west_tx, .{ .routes = .{ .tx = .{ WEST } } });
-  @set_local_color_config(west_rx, .{ .routes = .{ .rx = .{ WEST } } });
+  const south_rx_route = .{ .rx = .{ SOUTH }, .tx = .{ RAMP } };
+  @set_local_color_config(south_rx, .{ .routes = south_rx_route });
 
+  // East-West routes
+  const east_tx_route = .{ .rx = .{ RAMP }, .tx = .{ EAST } };
+  @set_local_color_config(east_tx, .{ .routes = east_tx_route });
+  
+  const east_rx_route = .{ .rx = .{ EAST }, .tx = .{ RAMP } };
+  @set_local_color_config(east_rx, .{ .routes = east_rx_route });
+  
+  const west_tx_route = .{ .rx = .{ RAMP }, .tx = .{ WEST } };
+  @set_local_color_config(west_tx, .{ .routes = west_tx_route });
+  
+  const west_rx_route = .{ .rx = .{ WEST }, .tx = .{ RAMP } };
+  @set_local_color_config(west_rx, .{ .routes = west_rx_route });
 
 }
 
