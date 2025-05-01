@@ -55,14 +55,19 @@ layout {
         .dy = dy,
         .odd_x = odd_x,
         .odd_y = odd_y,
-        .north_rx = if (odd_x != odd_y) y_a else y_b,
-        .north_tx = if (odd_x != odd_y) y_b else y_a,
-        .south_rx = if (odd_x != odd_y) y_c else y_d,
-        .south_tx = if (odd_x != odd_y) y_d else y_c,
-        .east_rx  = if (odd_x != odd_y) x_a else x_b,
-        .east_tx  = if (odd_x != odd_y) x_b else x_a,
-        .west_rx  = if (odd_x != odd_y) x_c else x_d,
-        .west_tx  = if (odd_x != odd_y) x_d else x_c,
+        
+        .south_tx = if (odd_y) y_c else y_d,
+        .north_tx = if (odd_y) y_a else y_b,
+        .north_rx = if (!odd_y) y_c else y_d,
+        .south_rx = if (!odd_y) y_a else y_b,
+        
+
+        .west_tx = if (odd_x) x_c else x_d,
+        .east_tx = if (odd_x) x_a else x_b,
+        .east_rx = if (!odd_x) x_c else x_d,
+        .west_rx = if (!odd_x) x_a else x_b,
+        
+
         .border_north = y == 0,
         .border_east  = x == Px - 1,
         .border_south = y == Py - 1,

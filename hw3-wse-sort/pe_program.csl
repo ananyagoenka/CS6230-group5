@@ -161,29 +161,30 @@ task col_sort() void {
   }
 
   var tmp: u32;
-  for (@range(u16, 0, dx, 1)) |c| {
+  for (@range(u16, 0, dx, 1)) |r| {
     // HW2.0: Implement the communication here
-    // TX
+    // Communicate & compare with north neighbor:
     if (!border_north) {
-      @mov32(dsd_north_tx, data[0, c]);
-    }
-    if (!border_south) {
-      @mov32(dsd_south_tx, data[dy-1, c]);
-    }
-    
-    // RX
-    if (!border_north) {
-      @mov32(&tmp, dsd_north_rx);
-      var a = data[0, c];
-      if (tmp < a) {
-        data[0, c] = tmp;
+      // send our top element
+      @mov32(dsd_north_tx, data[0, r]);
+      var tmp_n: u32;
+      // receive neighbor’s bottom element
+      @mov32(&tmp_n, dsd_north_rx);
+      // keep the larger at the south side
+      if (tmp_n > data[0, r]) {
+        data[0, r] = tmp_n;
       }
     }
+    // Communicate & compare with south neighbor:
     if (!border_south) {
-      @mov32(&tmp, dsd_south_rx);
-      var a = data[dy-1, c];
-      if (tmp > a) {
-        data[dy-1, c] = tmp;
+      // send our bottom element
+      @mov32(dsd_south_tx, data[dy - 1, r]);
+      var tmp_s: u32;
+      // receive neighbor’s top element
+      @mov32(&tmp_s, dsd_south_rx);
+      // keep the smaller at the north side
+      if (data[dy - 1, r] > tmp_s) {
+        data[dy - 1, r] = tmp_s;
       }
     }
   }
@@ -191,10 +192,9 @@ task col_sort() void {
   // HW2.1: Must be removed after HW2.1 because row_sort
   // is last taskt to be invoked and is already present
   // at the end of row_sort.
-  // sys_mod.unblock_cmd_stream(); 
+  sys_mod.unblock_cmd_stream(); 
   // HW2.1: Invoke the row_sort local_task here
   @activate(row_sort_task_id);
-
 }
 
 comptime {
@@ -230,35 +230,20 @@ comptime {
   @initialize_queue(west_iq,  .{ .color = west_rx });
 
   // HW1.1: Create the correct routing table
+  // @set_local_color_config(north_tx, .{ .routes = .{ ... }});
+  // Set routing for all directions
+  @set_local_color_config(north_tx, .{ .routes = .{ .rx = .{ RAMP }, .tx = .{ NORTH } } });
+  @set_local_color_config(north_rx, .{ .routes = .{ .rx = .{ NORTH }, .tx = .{ RAMP } } });
 
-  // North-South routes
-  const north_tx_route = .{ .rx = .{ RAMP }, .tx = .{ NORTH } };
-  @set_local_color_config(north_tx, .{ .routes = north_tx_route });
-  
-  const north_rx_route = .{ .rx = .{ NORTH }, .tx = .{ RAMP } };
-  @set_local_color_config(north_rx, .{ .routes = north_rx_route });
-  
-  const south_tx_route = .{ .rx = .{ RAMP }, .tx = .{ SOUTH } };
-  @set_local_color_config(south_tx, .{ .routes = south_tx_route });
-  
-  const south_rx_route = .{ .rx = .{ SOUTH }, .tx = .{ RAMP } };
-  @set_local_color_config(south_rx, .{ .routes = south_rx_route });
+  @set_local_color_config(south_tx, .{ .routes = .{ .rx = .{ RAMP }, .tx = .{ SOUTH } } });
+  @set_local_color_config(south_rx, .{ .routes = .{ .rx = .{ SOUTH }, .tx = .{ RAMP } } });
 
-  // East-West routes
-  const east_tx_route = .{ .rx = .{ RAMP }, .tx = .{ EAST } };
-  @set_local_color_config(east_tx, .{ .routes = east_tx_route });
-  
-  const east_rx_route = .{ .rx = .{ EAST }, .tx = .{ RAMP } };
-  @set_local_color_config(east_rx, .{ .routes = east_rx_route });
-  
-  const west_tx_route = .{ .rx = .{ RAMP }, .tx = .{ WEST } };
-  @set_local_color_config(west_tx, .{ .routes = west_tx_route });
-  
-  const west_rx_route = .{ .rx = .{ WEST }, .tx = .{ RAMP } };
-  @set_local_color_config(west_rx, .{ .routes = west_rx_route });
+  @set_local_color_config(east_tx, .{ .routes = .{ .rx = .{ RAMP }, .tx = .{ EAST } } });
+  @set_local_color_config(east_rx, .{ .routes = .{ .rx = .{ EAST }, .tx = .{ RAMP } } });
 
+  @set_local_color_config(west_tx, .{ .routes = .{ .rx = .{ RAMP }, .tx = .{ WEST } } });
+  @set_local_color_config(west_rx, .{ .routes = .{ .rx = .{ WEST }, .tx = .{ RAMP } } });
 }
-
 
 // RPC
 comptime{
