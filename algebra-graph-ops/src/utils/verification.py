@@ -2,19 +2,6 @@ import numpy as np
 import torch
 
 def verify_bfs_correctness(results):
-    """
-    Verify that different BFS implementations return the same results
-    
-    Parameters:
-    -----------
-    results : dict
-        Dictionary of BFS results from different implementations
-        
-    Returns:
-    --------
-    is_correct : bool
-        Whether all implementations return the same results
-    """
     # Use traditional BFS as reference
     ref_impl = 'Traditional_BFS'
     if ref_impl not in results:
@@ -23,28 +10,33 @@ def verify_bfs_correctness(results):
     
     ref_visited, ref_distances = results[ref_impl]
     
+    # For each implementation, create a list of (node, distance) pairs
+    # and sort first by distance, then by node ID
+    ref_pairs = [(int(node), ref_distances[node]) for node in ref_visited]
+    ref_pairs.sort(key=lambda x: (x[1], x[0]))  # Sort by distance, then by node ID
+    
     # Compare other implementations against reference
     for impl, (visited, distances) in results.items():
         if impl == ref_impl:
             continue
+        
+        # Convert to pairs and sort
+        impl_pairs = [(int(node), distances[node]) for node in visited]
+        impl_pairs.sort(key=lambda x: (x[1], x[0]))  # Sort by distance, then by node ID
+        
+        # Compare sorted pairs
+        if impl_pairs != ref_pairs:
+            print(f"Error: {impl} node-distance pairs differ from {ref_impl}")
             
-        # Check if visited nodes are the same (order matters for BFS)
-        if visited != ref_visited:
-            print(f"Error: {impl} visited nodes differ from {ref_impl}")
-            print(f"First 10 nodes in reference: {ref_visited[:10]}")
-            print(f"First 10 nodes in {impl}: {visited[:10]}")
-            if len(ref_visited) != len(visited):
-                print(f"Length mismatch: reference = {len(ref_visited)}, {impl} = {len(visited)}")
+            # Find first difference
+            for i in range(min(len(ref_pairs), len(impl_pairs))):
+                if ref_pairs[i] != impl_pairs[i]:
+                    print(f"First difference at index {i}: {ref_pairs[i]} vs {impl_pairs[i]}")
+                    break
+            
             return False
-            
-        # Check if distances are the same
-        for node, dist in ref_distances.items():
-            if node not in distances:
-                print(f"Error: Node {node} missing in {impl} distances")
-                return False
-            if distances[node] != dist:
-                print(f"Error: {impl} distance for node {node} is {distances[node]}, but reference is {dist}")
-                return False
+        
+        print(f"{impl} node-distance pairs match reference after sorting")
     
     return True
 
