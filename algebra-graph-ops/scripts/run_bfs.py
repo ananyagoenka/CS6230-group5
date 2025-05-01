@@ -31,7 +31,7 @@ from src.utils.benchmark import Benchmark
 
 def main():
     parser = argparse.ArgumentParser(description='Run BFS benchmarks')
-    parser.add_argument('--sizes', type=int, nargs='+', default=[100, 500, 1000, 5000, 10000], 
+    parser.add_argument('--sizes', type=int, nargs='+', default=[100, 500, 1000, 5000, 10000, 15000, 20000], 
                         help='Graph sizes to benchmark')
     parser.add_argument('--graph-type', type=str, choices=['random', 'scale-free', 'small-world'], 
                         default='scale-free', help='Type of graph to generate')
