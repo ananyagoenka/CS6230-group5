@@ -154,58 +154,103 @@ class Benchmark:
         
         print(f"Results loaded from {os.path.join(self.save_dir, filename)}")
     
-    def print_results(self, algorithms=None, graph_names=None, graph_sizes=None):
-        """
-        Print benchmark results in a tabular format
+    # def print_results(self, algorithms=None, graph_names=None, graph_sizes=None):
+    #     """
+    #     Print benchmark results in a tabular format
         
-        Parameters:
-        -----------
-        algorithms : list, optional
-            List of algorithms to include (default: all)
-        graph_names : list, optional
-            List of graph names to include (default: all)
-        graph_sizes : list, optional
-            List of graph sizes to include (default: all)
-        """
-        # Filter algorithms
-        if algorithms is None:
-            algorithms = list(self.results.keys())
+    #     Parameters:
+    #     -----------
+    #     algorithms : list, optional
+    #         List of algorithms to include (default: all)
+    #     graph_names : list, optional
+    #         List of graph names to include (default: all)
+    #     graph_sizes : list, optional
+    #         List of graph sizes to include (default: all)
+    #     """
+    #     # Filter algorithms
+    #     if algorithms is None:
+    #         algorithms = list(self.results.keys())
         
-        # Prepare data for tabulation
-        table_data = []
+    #     # Prepare data for tabulation
+    #     table_data = []
         
-        for alg in algorithms:
-            if alg not in self.results:
-                continue
+    #     for alg in algorithms:
+    #         if alg not in self.results:
+    #             continue
             
-            # Filter graph names
-            if graph_names is None:
-                graph_names_filtered = list(self.results[alg].keys())
-            else:
-                graph_names_filtered = [g for g in graph_names if g in self.results[alg]]
+    #         # Filter graph names
+    #         if graph_names is None:
+    #             graph_names_filtered = list(self.results[alg].keys())
+    #         else:
+    #             graph_names_filtered = [g for g in graph_names if g in self.results[alg]]
             
-            for graph in graph_names_filtered:
-                # Filter graph sizes
-                if graph_sizes is None:
-                    sizes = list(self.results[alg][graph].keys())
-                else:
-                    sizes = [s for s in graph_sizes if str(s) in self.results[alg][graph]]
+    #         for graph in graph_names_filtered:
+    #             # Filter graph sizes
+    #             if graph_sizes is None:
+    #                 sizes = list(self.results[alg][graph].keys())
+    #             else:
+    #                 sizes = [s for s in graph_sizes if str(s) in self.results[alg][graph]]
                 
-                for size in sizes:
-                    result = self.results[alg][graph][str(size)]
-                    table_data.append([
-                        alg,
-                        graph,
-                        size,
-                        f"{result['avg_time']:.6f}",
-                        f"{result['std_time']:.6f}",
-                        f"{result['min_time']:.6f}",
-                        f"{result['max_time']:.6f}"
-                    ])
+    #             for size in sizes:
+    #                 result = self.results[alg][graph][str(size)]
+    #                 table_data.append([
+    #                     alg,
+    #                     graph,
+    #                     size,
+    #                     f"{result['avg_time']:.6f}",
+    #                     f"{result['std_time']:.6f}",
+    #                     f"{result['min_time']:.6f}",
+    #                     f"{result['max_time']:.6f}"
+    #                 ])
         
-        # Print table
-        headers = ["Algorithm", "Graph", "Size", "Avg Time (s)", "Std Dev (s)", "Min Time (s)", "Max Time (s)"]
-        print(tabulate(table_data, headers=headers, tablefmt="grid"))
+    #     # Print table
+    #     headers = ["Algorithm", "Graph", "Size", "Avg Time (s)", "Std Dev (s)", "Min Time (s)", "Max Time (s)"]
+    #     print(tabulate(table_data, headers=headers, tablefmt="grid"))
+
+    def print_results(self, algorithms=None, graph_names=None, graph_sizes=None):
+      # Filter algorithms
+      if algorithms is None:
+          algorithms = list(self.results.keys())
+      
+      # Prepare data for tabulation
+      table_data = []
+      
+      for alg in algorithms:
+          if alg not in self.results:
+              continue
+          
+          # Filter graph names
+          if graph_names is None:
+              graph_names_filtered = list(self.results[alg].keys())
+          else:
+              graph_names_filtered = [g for g in graph_names if g in self.results[alg]]
+          
+          for graph in graph_names_filtered:
+              # Filter graph sizes - convert keys to strings for consistent comparison
+              sizes_dict = self.results[alg][graph]
+              
+              if graph_sizes is None:
+                  # Get all sizes as strings
+                  sizes = list(sizes_dict.keys())
+              else:
+                  # Convert requested sizes to strings for lookup
+                  sizes = [str(s) for s in graph_sizes if str(s) in sizes_dict]
+              
+              for size in sizes:
+                  result = sizes_dict[size]
+                  table_data.append([
+                      alg,
+                      graph,
+                      size,
+                      f"{result['avg_time']:.6f}",
+                      f"{result['std_time']:.6f}",
+                      f"{result['min_time']:.6f}",
+                      f"{result['max_time']:.6f}"
+                  ])
+      
+      # Print table
+      headers = ["Algorithm", "Graph", "Size", "Avg Time (s)", "Std Dev (s)", "Min Time (s)", "Max Time (s)"]
+      print(tabulate(table_data, headers=headers, tablefmt="grid"))
     
     def plot_comparison(self, graph_name, algorithms=None, graph_sizes=None, log_scale=True, 
                         save_file=None, show_plot=True):
