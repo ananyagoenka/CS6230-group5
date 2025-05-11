@@ -1,9 +1,16 @@
 import numpy as np
 import torch
 import time
-import queue
-from collections import deque
-from scipy.sparse import csr_matrix
+from collections import deque, defaultdict
+import multiprocessing as mp
+
+# Import OpenMP Python bindings
+try:
+    import pymp
+    HAS_PYMP = True
+except ImportError:
+    print("WARNING: pymp-pypi not found. Install with 'pip install pymp-pypi' for OpenMP support.")
+    HAS_PYMP = False
 
 class BFS:
     """
@@ -46,6 +53,96 @@ class BFS:
         
         return visited, distances
     
+    @staticmethod
+    def traditional_bfs_openmp(adj_list, start_node, num_threads=None):
+        """
+        OpenMP-accelerated BFS implementation using adjacency list
+        
+        Parameters:
+        -----------
+        adj_list : dict
+            Adjacency list representation of the graph
+        start_node : int
+            Starting node for BFS
+        num_threads : int or None
+            Number of threads to use. If None, uses number of CPU cores.
+            
+        Returns:
+        --------
+        visited : list
+            List of nodes in BFS order
+        distances : dict
+            Dictionary of distances from start_node to each node
+        """
+        if not HAS_PYMP:
+            print("OpenMP not available, falling back to traditional BFS")
+            return BFS.traditional_bfs_cpu(adj_list, start_node)
+            
+        if num_threads is None:
+            num_threads = mp.cpu_count()
+        
+        # Create a list representation of the graph for more efficient sharing
+        nodes = list(adj_list.keys())
+        n = len(nodes)
+        
+        # Initialize distances with infinity
+        distances = {}
+        for node in nodes:
+            distances[node] = float('infinity')
+        distances[start_node] = 0
+        
+        # Initialize visited and frontier structures
+        visited_arr = np.zeros(n, dtype=bool)  # Boolean array for efficient checks
+        node_to_idx = {node: i for i, node in enumerate(nodes)}  # Map nodes to indices
+        idx_to_node = {i: node for i, node in enumerate(nodes)}  # Map indices to nodes
+        
+        visited_idx = node_to_idx[start_node]
+        visited_arr[visited_idx] = True
+        
+        current_frontier = [start_node]
+        visited_list = [start_node]
+        
+        level = 0
+        
+        # BFS traversal
+        while current_frontier:
+            next_frontier = []
+            level += 1
+            
+            # Process current frontier in parallel with OpenMP
+            with pymp.Parallel(num_threads) as p:
+                # Create thread-local next frontier lists
+                local_next_frontiers = [[] for _ in range(num_threads)]
+                
+                # Distribute nodes across threads
+                for i in p.range(len(current_frontier)):
+                    node = current_frontier[i]
+                    thread_id = p.thread_num
+                    
+                    for neighbor in adj_list[node]:
+                        neighbor_idx = node_to_idx[neighbor]
+                        
+                        # First check without lock (optimistic)
+                        if not visited_arr[neighbor_idx]:
+                            # Use critical section for updating shared state
+                            with p.lock:
+                                if not visited_arr[neighbor_idx]:  # Double-check
+                                    visited_arr[neighbor_idx] = True
+                                    distances[neighbor] = level
+                                    local_next_frontiers[thread_id].append(neighbor)
+                
+                # Merge local frontiers into global next frontier
+                with p.lock:
+                    for local_frontier in local_next_frontiers:
+                        next_frontier.extend(local_frontier)
+                        visited_list.extend(local_frontier)
+            
+            # Update frontier for next iteration
+            current_frontier = next_frontier
+        
+        return visited_list, distances
+    
+    # Keep the original linear algebra implementations unchanged
     @staticmethod
     def la_bfs_cpu(adj_matrix, start_node):
         """

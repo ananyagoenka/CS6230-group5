@@ -3,6 +3,15 @@ import torch
 import time
 from collections import defaultdict
 from scipy.sparse import csr_matrix, diags
+import multiprocessing as mp
+
+# Import OpenMP Python bindings
+try:
+    import pymp
+    HAS_PYMP = True
+except ImportError:
+    print("WARNING: pymp-pypi not found. Install with 'pip install pymp-pypi' for OpenMP support.")
+    HAS_PYMP = False
 
 class PageRank:
     """
@@ -52,6 +61,90 @@ class PageRank:
             
             # Check for convergence
             diff = sum(abs(new_ranks[node] - ranks[node]) for node in adj_list)
+            ranks = new_ranks
+            
+            if diff < tol:
+                return ranks, iteration + 1
+        
+        return ranks, max_iterations
+    
+    @staticmethod
+    def traditional_pagerank_openmp(adj_list, damping=0.85, max_iterations=100, tol=1e-6, num_threads=None):
+        """
+        OpenMP-accelerated PageRank implementation using adjacency list
+        
+        Parameters:
+        -----------
+        adj_list : dict
+            Adjacency list representation of the graph
+        damping : float
+            Damping factor (default: 0.85)
+        max_iterations : int
+            Maximum number of iterations (default: 100)
+        tol : float
+            Convergence tolerance (default: 1e-6)
+        num_threads : int or None
+            Number of threads to use. If None, uses number of CPU cores.
+            
+        Returns:
+        --------
+        ranks : dict
+            Dictionary of PageRank scores for each node
+        iterations : int
+            Number of iterations performed
+        """
+        if not HAS_PYMP:
+            print("OpenMP not available, falling back to traditional PageRank")
+            return PageRank.traditional_pagerank_cpu(adj_list, damping, max_iterations, tol)
+            
+        if num_threads is None:
+            num_threads = mp.cpu_count()
+        
+        n = len(adj_list)
+        nodes = list(adj_list.keys())
+        
+        # Initialize PageRank scores
+        ranks = {node: 1.0 / n for node in nodes}
+        
+        # Calculate outgoing link counts
+        outgoing_counts = {node: len(neighbors) for node, neighbors in adj_list.items()}
+        
+        # PageRank algorithm with shared arrays
+        for iteration in range(max_iterations):
+            # Create new ranks for this iteration (no need for shared array)
+            new_ranks = {node: (1 - damping) / n for node in nodes}
+            
+            # Process nodes in parallel
+            with pymp.Parallel(num_threads) as p:
+                # Local contribution dictionary for each thread
+                local_contributions = [{} for _ in range(num_threads)]
+                
+                # Each thread processes a subset of nodes
+                for i in p.range(n):
+                    node = nodes[i]
+                    thread_id = p.thread_num
+                    
+                    # Skip nodes with no outgoing links
+                    if outgoing_counts[node] == 0:
+                        continue
+                    
+                    # Calculate contribution to neighbors
+                    contribution = damping * ranks[node] / outgoing_counts[node]
+                    
+                    # Update contributions locally
+                    for neighbor in adj_list[node]:
+                        if neighbor not in local_contributions[thread_id]:
+                            local_contributions[thread_id][neighbor] = 0
+                        local_contributions[thread_id][neighbor] += contribution
+                
+                # Combine local contributions with lock to avoid race conditions
+                with p.lock:
+                    for thread_contrib in local_contributions:
+                        for node, contrib in thread_contrib.items():
+                            new_ranks[node] += contrib
+            
+            # Check for convergence
+            diff = sum(abs(new_ranks[node] - ranks[node]) for node in nodes)
             ranks = new_ranks
             
             if diff < tol:

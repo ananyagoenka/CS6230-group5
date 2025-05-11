@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Script to run PageRank benchmarks comparing traditional and linear algebra implementations
+Script to run PageRank benchmarks comparing traditional, OpenMP-optimized, and linear algebra implementations
 """
 
 import os
@@ -12,6 +12,7 @@ import time
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+import multiprocessing
 
 # Add the parent directory to the path so we can import our modules
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -31,7 +32,7 @@ from src.utils.benchmark import Benchmark
 
 def main():
     parser = argparse.ArgumentParser(description='Run PageRank benchmarks')
-    parser.add_argument('--sizes', type=int, nargs='+', default=[100, 500, 1000, 5000, 10000, 15000, 20000], 
+    parser.add_argument('--sizes', type=int, nargs='+', default=[100, 500, 1000, 5000, 10000, 15000, 20000, 50000], 
                         help='Graph sizes to benchmark')
     parser.add_argument('--graph-type', type=str, choices=['random', 'scale-free', 'small-world'], 
                         default='scale-free', help='Type of graph to generate')
@@ -43,6 +44,8 @@ def main():
     parser.add_argument('--tolerance', type=float, default=1e-6, help='Convergence tolerance for PageRank')
     parser.add_argument('--save-dir', type=str, default='results', help='Directory to save results')
     parser.add_argument('--plot', action='store_true', help='Generate plots')
+    parser.add_argument('--threads', type=int, nargs='+', default=[2, 4, 8], 
+                        help='Number of threads for OpenMP implementations')
     
     args = parser.parse_args()
     
@@ -64,7 +67,7 @@ def main():
     # Define graph generation function based on type
     if args.graph_type == 'random':
         def generate_graph(n):
-            # Adjust p to maintain average degree around l0
+            # Adjust p to maintain average degree around 10
             p = 10 / (n - 1)
             return generate_random_graph(n, p, seed=args.seed)
     elif args.graph_type == 'scale-free':
@@ -76,6 +79,14 @@ def main():
             # Each node connected to 10 nearest neighbors (5 on each side)
             # Rewiring probability of 0.1
             return generate_small_world_graph(n, 10, 0.1, seed=args.seed)
+    
+    # Get max available threads
+    max_threads = multiprocessing.cpu_count()
+    print(f"System has {max_threads} CPU cores available")
+    
+    # Add max threads if not already in the list
+    if max_threads not in args.threads:
+        args.threads.append(max_threads)
     
     # Run benchmarks for each graph size
     for size in args.sizes:
@@ -105,6 +116,26 @@ def main():
         )
         benchmark.add_result('Traditional_PageRank', args.graph_type, size, trad_result)
         print(f"Average time: {trad_result['avg_time']:.6f} seconds")
+        
+        # Run OpenMP-optimized PageRank
+        print("Running OpenMP-optimized PageRank...")
+        
+        # Test with different thread counts
+        for thread_count in args.threads:
+            print(f"  With {thread_count} threads:")
+            
+            # Traditional OpenMP PageRank
+            openmp_result = benchmark.run_test(
+                PageRank.traditional_pagerank_openmp,
+                adj_list,
+                args.damping,
+                args.max_iters,
+                args.tolerance,
+                thread_count,
+                n_runs=args.runs
+            )
+            benchmark.add_result(f'OpenMP_PageRank_{thread_count}threads', args.graph_type, size, openmp_result)
+            print(f"  OpenMP PageRank: {openmp_result['avg_time']:.6f} seconds")
         
         # Run linear algebra PageRank on CPU
         print("Running linear algebra PageRank on CPU...")
@@ -163,6 +194,92 @@ def main():
             args.graph_type,
             save_file=f'pagerank_{args.graph_type}_speedup.png'
         )
+        
+        # Generate additional plot comparing OpenMP implementations with different thread counts
+        print("Generating OpenMP thread scaling plot...")
+        # Extract OpenMP results for different thread counts
+        openmp_results = {}
+        for thread_count in args.threads:
+            openmp_results[f'OpenMP_PageRank_{thread_count}threads'] = benchmark.get_results(f'OpenMP_PageRank_{thread_count}threads', args.graph_type)
+        
+        # Create plot
+        plt.figure(figsize=(12, 8))
+        for key, results in openmp_results.items():
+            if results:  # Only plot if we have results
+                sizes = [r['size'] for r in results]
+                times = [r['avg_time'] for r in results]
+                plt.plot(sizes, times, marker='o', label=key)
+        
+        plt.xlabel('Graph Size (nodes)')
+        plt.ylabel('Time (seconds)')
+        plt.title(f'PageRank OpenMP Thread Scaling ({args.graph_type} graph)')
+        plt.legend()
+        plt.grid(True)
+        plt.savefig(f'pagerank_{args.graph_type}_thread_scaling.png')
+        plt.close()
+        
+        # Generate algorithmic comparison plot
+        print("Generating algorithm comparison plot...")
+        algorithm_results = {
+            'Traditional_PageRank': benchmark.get_results('Traditional_PageRank', args.graph_type),
+            'LA_PageRank_CPU': benchmark.get_results('LA_PageRank_CPU', args.graph_type)
+        }
+        
+        # Add best OpenMP result
+        best_thread_count = max(args.threads)
+        algorithm_results[f'OpenMP_PageRank_{best_thread_count}threads'] = benchmark.get_results(f'OpenMP_PageRank_{best_thread_count}threads', args.graph_type)
+        
+        if args.gpu:
+            algorithm_results['LA_PageRank_GPU_Dense'] = benchmark.get_results('LA_PageRank_GPU_Dense', args.graph_type)
+            algorithm_results['LA_PageRank_GPU_Sparse'] = benchmark.get_results('LA_PageRank_GPU_Sparse', args.graph_type)
+        
+        # Create plot
+        plt.figure(figsize=(12, 8))
+        for key, results in algorithm_results.items():
+            if results:  # Only plot if we have results
+                sizes = [r['size'] for r in results]
+                times = [r['avg_time'] for r in results]
+                plt.plot(sizes, times, marker='o', linewidth=2, label=key)
+        
+        plt.xlabel('Graph Size (nodes)')
+        plt.ylabel('Time (seconds)')
+        plt.title(f'PageRank Algorithm Comparison ({args.graph_type} graph)')
+        plt.legend()
+        plt.grid(True)
+        plt.yscale('log')  # Log scale often helps visualize large performance differences
+        plt.savefig(f'pagerank_{args.graph_type}_algorithm_comparison.png')
+        plt.close()
+        
+        # Generate convergence iterations plot
+        print("Generating convergence iterations plot...")
+        convergence_results = {
+            'Traditional_PageRank': benchmark.get_results('Traditional_PageRank', args.graph_type),
+            'LA_PageRank_CPU': benchmark.get_results('LA_PageRank_CPU', args.graph_type)
+        }
+        
+        # Add OpenMP results
+        best_thread_count = max(args.threads)
+        convergence_results[f'OpenMP_PageRank_{best_thread_count}threads'] = benchmark.get_results(f'OpenMP_PageRank_{best_thread_count}threads', args.graph_type)
+        
+        if args.gpu:
+            convergence_results['LA_PageRank_GPU_Dense'] = benchmark.get_results('LA_PageRank_GPU_Dense', args.graph_type)
+            convergence_results['LA_PageRank_GPU_Sparse'] = benchmark.get_results('LA_PageRank_GPU_Sparse', args.graph_type)
+        
+        # Create plot
+        plt.figure(figsize=(12, 8))
+        for key, results in convergence_results.items():
+            if results and 'iterations' in results[0]:  # Only plot if we have results with iteration data
+                sizes = [r['size'] for r in results]
+                iterations = [r['iterations'] for r in results]
+                plt.plot(sizes, iterations, marker='o', linewidth=2, label=key)
+        
+        plt.xlabel('Graph Size (nodes)')
+        plt.ylabel('Iterations to Convergence')
+        plt.title(f'PageRank Convergence Iterations ({args.graph_type} graph)')
+        plt.legend()
+        plt.grid(True)
+        plt.savefig(f'pagerank_{args.graph_type}_convergence.png')
+        plt.close()
 
 if __name__ == '__main__':
     main()
