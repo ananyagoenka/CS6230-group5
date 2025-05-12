@@ -122,6 +122,125 @@ def verify_pagerank_correctness(results, tolerance=1e-5):
     
     return True
 
+import numpy as np
+import torch
+
+def verify_connected_components_correctness(results):
+    """
+    Verify that different Connected Components implementations return equivalent results.
+    Two implementations are considered equivalent if they divide the graph into the same connected components,
+    even if the component IDs are different.
+    
+    Parameters:
+    -----------
+    results : dict
+        Dictionary of CC results from different implementations, where each result is a tuple
+        (components, component_map)
+        
+    Returns:
+    --------
+    is_correct : bool
+        Whether all implementations return equivalent results
+    """
+    # Use traditional CC as reference
+    ref_impl = 'Traditional_CC'
+    if ref_impl not in results:
+        print("Error: Reference implementation not found")
+        return False
+    
+    ref_components, ref_component_map = results[ref_impl]
+    
+    # Create a reference relation: nodes in the same component
+    ref_same_component = {}
+    for node1 in ref_component_map:
+        for node2 in ref_component_map:
+            if node1 <= node2:  # Avoid duplicates (i,j) and (j,i)
+                key = (node1, node2)
+                ref_same_component[key] = (ref_component_map[node1] == ref_component_map[node2])
+    
+    # Compare other implementations against reference
+    for impl, (components, component_map) in results.items():
+        if impl == ref_impl:
+            continue
+        
+        # Check if connectivity relation is the same
+        same_component = {}
+        for node1 in component_map:
+            for node2 in component_map:
+                if node1 <= node2:  # Avoid duplicates
+                    key = (node1, node2)
+                    same_component[key] = (component_map[node1] == component_map[node2])
+        
+        # Compare relations
+        is_equivalent = True
+        mismatches = []
+        for key, value in ref_same_component.items():
+            if key not in same_component:
+                print(f"Error: Node pair {key} missing in {impl}")
+                is_equivalent = False
+                break
+            
+            if same_component[key] != value:
+                mismatches.append(key)
+                is_equivalent = False
+        
+        if not is_equivalent:
+            print(f"Error: {impl} is not equivalent to reference {ref_impl}")
+            if mismatches:
+                print(f"First few mismatches: {mismatches[:5]}")
+            return False
+        
+        # Check number of components
+        if len(ref_components) != len(components):
+            print(f"Warning: {impl} has different number of components than {ref_impl}")
+            print(f"  {ref_impl}: {len(ref_components)}, {impl}: {len(components)}")
+            # This can be valid if the component IDs are not consecutive integers
+            # So we don't fail just for this
+        
+        print(f"{impl} is equivalent to reference {ref_impl}")
+    
+    return True
+
+def print_cc_stats(results):
+    """
+    Print statistics about Connected Components results
+    
+    Parameters:
+    -----------
+    results : dict
+        Dictionary of algorithm results from different implementations
+    """
+    for impl, result in results.items():
+        print(f"\n{impl} statistics:")
+        
+        components, component_map = result
+        
+        # Count components
+        num_components = len(components)
+        print(f"  Number of components: {num_components}")
+        
+        # Get component sizes
+        component_sizes = [len(component) for component in components]
+        
+        # Print component size stats
+        print(f"  Largest component size: {max(component_sizes) if component_sizes else 0}")
+        print(f"  Smallest component size: {min(component_sizes) if component_sizes else 0}")
+        print(f"  Average component size: {sum(component_sizes)/len(component_sizes) if component_sizes else 0:.2f}")
+        
+        # Print distribution of component sizes
+        size_counts = {}
+        for size in component_sizes:
+            if size not in size_counts:
+                size_counts[size] = 0
+            size_counts[size] += 1
+        
+        # Print most common component sizes
+        if size_counts:
+            sorted_sizes = sorted(size_counts.items(), key=lambda x: x[1], reverse=True)
+            print(f"  Most common component sizes:")
+            for size, count in sorted_sizes[:5]:  # Top 5 most common sizes
+                print(f"    Size {size}: {count} components")
+                
 def print_algorithm_stats(results):
     """
     Print statistics about algorithm results
