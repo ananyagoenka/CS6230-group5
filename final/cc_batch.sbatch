@@ -10,7 +10,7 @@
 #SBATCH --qos=regular
 #SBATCH --gpus-per-node=4
 
-echo "CC Benchmark for only dense gpu with longer time"
+echo "CC Benchmark for only dense gpu with longer time for 30k nodes"
 
 VENV_PATH="/global/homes/a/asyam/myenv"
 source $VENV_PATH/bin/activate

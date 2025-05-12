@@ -275,27 +275,27 @@ def main():
         except Exception as e:
             print(f"Error in traditional PageRank: {e}")
         
-        # Run linear algebra PageRank on CPU
-        print("\nRunning linear algebra PageRank on CPU...")
-        try:
-            la_cpu_result, _ = run_test(
-                PageRank.la_pagerank_cpu,
-                adj_matrix_np,
-                damping=args.damping,
-                max_iterations=args.max_iters,
-                tol=args.tolerance,
-                n_runs=args.runs
-            )
-            size_results['LA_PageRank_CPU'] = la_cpu_result
-            print(f"Average time: {la_cpu_result['avg_time']:.6f} seconds")
-            print(f"Std dev: {la_cpu_result['std_time']:.6f} seconds")
-            print(f"Min time: {la_cpu_result['min_time']:.6f} seconds")
-            print(f"Max time: {la_cpu_result['max_time']:.6f} seconds")
-            if 'iterations' in la_cpu_result:
-                print(f"Iterations: {la_cpu_result['iterations']:.1f}")
-            print(f"Speedup vs traditional: {trad_result['avg_time'] / la_cpu_result['avg_time']:.2f}x")
-        except Exception as e:
-            print(f"Error in LA PageRank CPU: {e}")
+        # # Run linear algebra PageRank on CPU
+        # print("\nRunning linear algebra PageRank on CPU...")
+        # try:
+        #     la_cpu_result, _ = run_test(
+        #         PageRank.la_pagerank_cpu,
+        #         adj_matrix_np,
+        #         damping=args.damping,
+        #         max_iterations=args.max_iters,
+        #         tol=args.tolerance,
+        #         n_runs=args.runs
+        #     )
+        #     size_results['LA_PageRank_CPU'] = la_cpu_result
+        #     print(f"Average time: {la_cpu_result['avg_time']:.6f} seconds")
+        #     print(f"Std dev: {la_cpu_result['std_time']:.6f} seconds")
+        #     print(f"Min time: {la_cpu_result['min_time']:.6f} seconds")
+        #     print(f"Max time: {la_cpu_result['max_time']:.6f} seconds")
+        #     if 'iterations' in la_cpu_result:
+        #         print(f"Iterations: {la_cpu_result['iterations']:.1f}")
+        #     print(f"Speedup vs traditional: {trad_result['avg_time'] / la_cpu_result['avg_time']:.2f}x")
+        # except Exception as e:
+        #     print(f"Error in LA PageRank CPU: {e}")
         
         # Run linear algebra PageRank on GPU if requested
         if args.gpu:

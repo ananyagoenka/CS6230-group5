@@ -57,7 +57,7 @@ def run_test(func, *args, n_runs=1, **kwargs):
 
 def main():
     parser = argparse.ArgumentParser(description='Run Connected Components benchmarks (excluding multiprocessing)')
-    parser.add_argument('--sizes', type=int, nargs='+', default=[15000, 20000, 30000], 
+    parser.add_argument('--sizes', type=int, nargs='+', default=[50000], 
                         help='Graph sizes to benchmark')
     parser.add_argument('--graph-type', type=str, choices=['random', 'scale-free', 'small-world'], 
                         default='scale-free', help='Type of graph to generate')
@@ -225,19 +225,19 @@ def main():
         print(f"Min time: {trad_result['min_time']:.6f} seconds")
         print(f"Max time: {trad_result['max_time']:.6f} seconds")
         
-        # Run linear algebra CC on CPU
-        print("\nRunning linear algebra CC on CPU...")
-        la_cpu_result, _ = run_test(
-            ConnectedComponents.la_cc_cpu,
-            adj_matrix_np,
-            n_runs=args.runs
-        )
-        size_results['LA_CC_CPU'] = la_cpu_result
-        print(f"Average time: {la_cpu_result['avg_time']:.6f} seconds")
-        print(f"Std dev: {la_cpu_result['std_time']:.6f} seconds")
-        print(f"Min time: {la_cpu_result['min_time']:.6f} seconds")
-        print(f"Max time: {la_cpu_result['max_time']:.6f} seconds")
-        print(f"Speedup vs traditional: {trad_result['avg_time'] / la_cpu_result['avg_time']:.2f}x")
+        # # Run linear algebra CC on CPU
+        # print("\nRunning linear algebra CC on CPU...")
+        # la_cpu_result, _ = run_test(
+        #     ConnectedComponents.la_cc_cpu,
+        #     adj_matrix_np,
+        #     n_runs=args.runs
+        # )
+        # size_results['LA_CC_CPU'] = la_cpu_result
+        # print(f"Average time: {la_cpu_result['avg_time']:.6f} seconds")
+        # print(f"Std dev: {la_cpu_result['std_time']:.6f} seconds")
+        # print(f"Min time: {la_cpu_result['min_time']:.6f} seconds")
+        # print(f"Max time: {la_cpu_result['max_time']:.6f} seconds")
+        # print(f"Speedup vs traditional: {trad_result['avg_time'] / la_cpu_result['avg_time']:.2f}x")
         
         # Run linear algebra CC on GPU if requested
         if args.gpu:
