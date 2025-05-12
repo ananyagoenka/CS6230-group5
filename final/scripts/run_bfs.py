@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-Script to run BFS benchmarks comparing traditional, OpenMP-optimized, and linear algebra implementations
+Script to run BFS benchmarks comparing traditional, multiprocessing, 
+and linear algebra implementations
 """
 
 import os
@@ -32,7 +33,7 @@ from src.utils.benchmark import Benchmark
 
 def main():
     parser = argparse.ArgumentParser(description='Run BFS benchmarks')
-    parser.add_argument('--sizes', type=int, nargs='+', default=[100, 500, 1000, 5000, 10000], 
+    parser.add_argument('--sizes', type=int, nargs='+', default=[100, 500, 1000, 5000], 
                         help='Graph sizes to benchmark')
     parser.add_argument('--graph-type', type=str, choices=['random', 'scale-free', 'small-world'], 
                         default='scale-free', help='Type of graph to generate')
@@ -41,8 +42,11 @@ def main():
     parser.add_argument('--gpu', action='store_true', help='Use GPU acceleration')
     parser.add_argument('--save-dir', type=str, default='results', help='Directory to save results')
     parser.add_argument('--plot', action='store_true', help='Generate plots')
-    parser.add_argument('--threads', type=int, nargs='+', default=[2, 4, 8], 
-                        help='Number of threads for OpenMP implementations')
+    parser.add_argument('--processes', type=int, nargs='+', default=[2, 4, 8], 
+                        help='Number of processes for multiprocessing implementations')
+    parser.add_argument('--skip-mp', action='store_true', help='Skip multiprocessing benchmarks')
+    parser.add_argument('--verify', action='store_true', help='Verify implementation correctness before benchmarking')
+    parser.add_argument('--verify-size', type=int, default=500, help='Graph size for verification')
     
     args = parser.parse_args()
     
@@ -77,10 +81,92 @@ def main():
             # Rewiring probability of 0.1
             return generate_small_world_graph(n, 10, 0.1, seed=args.seed)
     
-    # Get max available threads
-    max_threads = multiprocessing.cpu_count()
-    print(f"System has {max_threads} CPU cores available")
+    # Get max available cores
+    max_cores = multiprocessing.cpu_count()
+    print(f"System has {max_cores} CPU cores available")
     
+    # Verify implementation correctness if requested
+    if args.verify:
+        print(f"\nVerifying implementation correctness with graph of size {args.verify_size}...")
+        
+        # Generate verification graph
+        G_verify = generate_graph(args.verify_size)
+        print_graph_stats(G_verify)
+        
+        # Convert graph to different representations
+        adj_list_verify = graph_to_adj_list(G_verify)
+        adj_matrix_np_verify = graph_to_adj_matrix_numpy(G_verify)
+        
+        # Choose a start node (node with highest degree)
+        start_node_verify = max(G_verify.degree(), key=lambda x: x[1])[0]
+        
+        verification_results = {}
+        
+        # Run traditional BFS
+        print("Running traditional BFS for verification...")
+        traditional_result = BFS.traditional_bfs_cpu(adj_list_verify, start_node_verify)
+        verification_results['Traditional_BFS'] = traditional_result
+        
+        # Run multiprocessing BFS with a reasonable process count
+        if not args.skip_mp:
+            process_count = min(4, max_cores)
+            print(f"Running multiprocessing BFS with {process_count} processes for verification...")
+            try:
+                mp_result = BFS.traditional_bfs_multiprocessing(
+                    adj_list_verify,
+                    start_node_verify,
+                    process_count
+                )
+                verification_results[f'MP_BFS_{process_count}processes'] = mp_result
+            except Exception as e:
+                print(f"Error in multiprocessing BFS verification: {e}")
+        
+        # Run linear algebra BFS on CPU
+        print("Running linear algebra BFS on CPU for verification...")
+        try:
+            la_cpu_result = BFS.la_bfs_cpu(
+                adj_matrix_np_verify,
+                start_node_verify
+            )
+            verification_results['LA_BFS_CPU'] = la_cpu_result
+        except Exception as e:
+            print(f"Error in LA BFS verification: {e}")
+        
+        # Verify results
+        print("\nVerifying implementation correctness...")
+        all_correct = True
+        reference_visited, reference_distances = verification_results['Traditional_BFS']
+        
+        for name, (visited, distances) in verification_results.items():
+            if name == 'Traditional_BFS':
+                continue
+            
+            # Check if all nodes in the reference implementation have the same distance
+            distances_match = True
+            for node, distance in reference_distances.items():
+                if node not in distances or distances[node] != distance:
+                    print(f"Distance mismatch in {name} for node {node}: "
+                          f"Expected {distance}, Got {distances.get(node, 'missing')}")
+                    distances_match = False
+                    all_correct = False
+                    break
+            
+            # Check if all nodes in this implementation are in the reference
+            for node in distances:
+                if node not in reference_distances:
+                    print(f"Node {node} in {name} but not in reference implementation")
+                    all_correct = False
+                    break
+            
+            if distances_match:
+                print(f"{name} matches the reference implementation")
+        
+        if not all_correct:
+            print("\nWARNING: Some implementations do not match the reference!")
+            proceed = input("Do you want to proceed with benchmarking anyway? (y/n): ")
+            if proceed.lower() != 'y':
+                print("Exiting...")
+                return
     
     # Run benchmarks for each graph size
     for size in args.sizes:
@@ -113,23 +199,28 @@ def main():
         benchmark.add_result('Traditional_BFS', args.graph_type, size, trad_result)
         print(f"Average time: {trad_result['avg_time']:.6f} seconds")
         
-        # Run OpenMP-optimized BFS
-        print("Running OpenMP-optimized BFS implementation...")
-        
-        # Test with different thread counts
-        for thread_count in args.threads:
-            print(f"  With {thread_count} threads:")
+        # Run multiprocessing-based BFS with different process counts
+        if not args.skip_mp:
+            print("Running multiprocessing BFS implementation...")
             
-            # Standard OpenMP BFS
-            openmp_result = benchmark.run_test(
-                BFS.traditional_bfs_openmp,
-                adj_list,
-                start_node,
-                thread_count,
-                n_runs=args.runs
-            )
-            benchmark.add_result(f'OpenMP_BFS_{thread_count}threads', args.graph_type, size, openmp_result)
-            print(f"  OpenMP BFS: {openmp_result['avg_time']:.6f} seconds")
+            # Test with different process counts
+            for process_count in args.processes:
+                if process_count <= max_cores:
+                    print(f"  With {process_count} processes:")
+                    
+                    # Multiprocessing BFS
+                    try:
+                        mp_result = benchmark.run_test(
+                            BFS.traditional_bfs_multiprocessing,
+                            adj_list,
+                            start_node,
+                            process_count,
+                            n_runs=args.runs
+                        )
+                        benchmark.add_result(f'MP_BFS_{process_count}processes', args.graph_type, size, mp_result)
+                        print(f"  Multiprocessing BFS: {mp_result['avg_time']:.6f} seconds")
+                    except Exception as e:
+                        print(f"  Error in multiprocessing BFS with {process_count} processes: {e}")
         
         # Run linear algebra BFS on CPU
         print("Running linear algebra BFS on CPU...")
@@ -183,28 +274,28 @@ def main():
             save_file=f'bfs_{args.graph_type}_speedup.png'
         )
         
-        # Generate additional plot comparing OpenMP implementations with different thread counts
-        print("Generating OpenMP thread scaling plot...")
-        # Extract OpenMP results for different thread counts
-        openmp_results = {}
-        for thread_count in args.threads:
-            openmp_results[f'OpenMP_BFS_{thread_count}threads'] = benchmark.get_results(f'OpenMP_BFS_{thread_count}threads', args.graph_type)
-        
-        # Create plot
-        plt.figure(figsize=(12, 8))
-        for key, results in openmp_results.items():
-            if results:  # Only plot if we have results
-                sizes = [r['size'] for r in results]
-                times = [r['avg_time'] for r in results]
-                plt.plot(sizes, times, marker='o', label=key)
-        
-        plt.xlabel('Graph Size (nodes)')
-        plt.ylabel('Time (seconds)')
-        plt.title(f'BFS OpenMP Thread Scaling ({args.graph_type} graph)')
-        plt.legend()
-        plt.grid(True)
-        plt.savefig(f'bfs_{args.graph_type}_thread_scaling.png')
-        plt.close()
+        # Generate multiprocessing scaling plot if applicable
+        if not args.skip_mp:
+            print("Generating multiprocessing scaling plot...")
+            mp_results = {}
+            for process_count in args.processes:
+                mp_results[f'MP_BFS_{process_count}processes'] = benchmark.get_results(f'MP_BFS_{process_count}processes', args.graph_type)
+            
+            # Create plot
+            plt.figure(figsize=(12, 8))
+            for key, results in mp_results.items():
+                if results:  # Only plot if we have results
+                    sizes = [r['size'] for r in results]
+                    times = [r['avg_time'] for r in results]
+                    plt.plot(sizes, times, marker='o', label=key)
+            
+            plt.xlabel('Graph Size (nodes)')
+            plt.ylabel('Time (seconds)')
+            plt.title(f'BFS Multiprocessing Scaling ({args.graph_type} graph)')
+            plt.legend()
+            plt.grid(True)
+            plt.savefig(f'bfs_{args.graph_type}_mp_scaling.png')
+            plt.close()
         
         # Generate algorithmic comparison plot
         print("Generating algorithm comparison plot...")
@@ -213,9 +304,13 @@ def main():
             'LA_BFS_CPU': benchmark.get_results('LA_BFS_CPU', args.graph_type)
         }
         
-        # Add best OpenMP result
-        best_thread_count = max(args.threads)
-        algorithm_results[f'OpenMP_BFS_{best_thread_count}threads'] = benchmark.get_results(f'OpenMP_BFS_{best_thread_count}threads', args.graph_type)
+        # Add multiprocessing if available
+        if not args.skip_mp:
+            best_process_count = max(args.processes)
+            mp_key = f'MP_BFS_{best_process_count}processes'
+            mp_results = benchmark.get_results(mp_key, args.graph_type)
+            if mp_results:
+                algorithm_results[mp_key] = mp_results
         
         if args.gpu:
             algorithm_results['LA_BFS_GPU_Dense'] = benchmark.get_results('LA_BFS_GPU_Dense', args.graph_type)
@@ -236,6 +331,38 @@ def main():
         plt.grid(True)
         plt.yscale('log')  # Log scale often helps visualize large performance differences
         plt.savefig(f'bfs_{args.graph_type}_algorithm_comparison.png')
+        plt.close()
+        
+        # Generate parallel approaches comparison plot
+        print("Generating parallel approaches comparison plot...")
+        parallel_results = {}
+        
+        # Add best multiprocessing result
+        if not args.skip_mp:
+            best_process_count = max(args.processes)
+            mp_key = f'MP_{best_process_count}processes'
+            mp_results = benchmark.get_results(f'MP_BFS_{best_process_count}processes', args.graph_type)
+            if mp_results:
+                parallel_results[mp_key] = mp_results
+        
+        # Add traditional for reference
+        parallel_results['Traditional'] = benchmark.get_results('Traditional_BFS', args.graph_type)
+        
+        # Create plot
+        plt.figure(figsize=(12, 8))
+        for key, results in parallel_results.items():
+            if results:  # Only plot if we have results
+                sizes = [r['size'] for r in results]
+                times = [r['avg_time'] for r in results]
+                plt.plot(sizes, times, marker='o', linewidth=2, label=key)
+        
+        plt.xlabel('Graph Size (nodes)')
+        plt.ylabel('Time (seconds)')
+        plt.title(f'BFS Parallel Approaches Comparison ({args.graph_type} graph)')
+        plt.legend()
+        plt.grid(True)
+        plt.yscale('log')  
+        plt.savefig(f'bfs_{args.graph_type}_parallel_comparison.png')
         plt.close()
 
 if __name__ == '__main__':
