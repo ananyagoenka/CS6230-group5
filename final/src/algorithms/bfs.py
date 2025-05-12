@@ -142,7 +142,6 @@ class BFS:
         
         return visited_list, distances
     
-    # Keep the original linear algebra implementations unchanged
     @staticmethod
     def la_bfs_cpu(adj_matrix, start_node):
         """

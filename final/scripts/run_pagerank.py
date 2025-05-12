@@ -84,9 +84,6 @@ def main():
     max_threads = multiprocessing.cpu_count()
     print(f"System has {max_threads} CPU cores available")
     
-    # Add max threads if not already in the list
-    if max_threads not in args.threads:
-        args.threads.append(max_threads)
     
     # Run benchmarks for each graph size
     for size in args.sizes:

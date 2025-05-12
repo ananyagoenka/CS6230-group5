@@ -37,7 +37,7 @@ def main():
     parser.add_argument('--graph-type', type=str, choices=['random', 'scale-free', 'small-world'], 
                         default='scale-free', help='Type of graph to generate')
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
-    parser.add_argument('--runs', type=int, default=5, help='Number of runs for each benchmark')
+    parser.add_argument('--runs', type=int, default=1, help='Number of runs for each benchmark')
     parser.add_argument('--gpu', action='store_true', help='Use GPU acceleration')
     parser.add_argument('--save-dir', type=str, default='results', help='Directory to save results')
     parser.add_argument('--plot', action='store_true', help='Generate plots')
@@ -81,9 +81,6 @@ def main():
     max_threads = multiprocessing.cpu_count()
     print(f"System has {max_threads} CPU cores available")
     
-    # Add max threads if not already in the list
-    if max_threads not in args.threads:
-        args.threads.append(max_threads)
     
     # Run benchmarks for each graph size
     for size in args.sizes:
