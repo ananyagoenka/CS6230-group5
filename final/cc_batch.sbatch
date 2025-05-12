@@ -1,14 +1,16 @@
 #!/bin/bash
-#SBATCH --job-name=bfs_benchmark
-#SBATCH --time=00:30:00
+#SBATCH --job-name=cc_benchmark
+#SBATCH --time=02:00:00
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --mail-user=as2839@cornell.edu
 #SBATCH --mail-type=ALL
 #SBATCH --constraint=gpu
 #SBATCH --account=m4341_g
-#SBATCH --qos=debug
+#SBATCH --qos=regular
 #SBATCH --gpus-per-node=4
+
+echo "CC Benchmark for only dense gpu with longer time"
 
 VENV_PATH="/global/homes/a/asyam/myenv"
 source $VENV_PATH/bin/activate

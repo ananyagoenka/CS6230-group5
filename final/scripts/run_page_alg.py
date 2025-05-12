@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Script to run PageRank benchmarks comparing traditional, multiprocessing, 
-and linear algebra implementations - without plotting or saving
+Script to run PageRank benchmarks comparing traditional and linear algebra 
+implementations - without plotting or saving (excludes multiprocessing)
 """
 
 import os
@@ -10,7 +10,6 @@ import argparse
 import torch
 import numpy as np
 import time
-import multiprocessing
 
 # Add the parent directory to the path so we can import our modules
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -23,9 +22,13 @@ from src.utils.graph_utils import (
     graph_to_adj_list,
     graph_to_adj_matrix_numpy,
     graph_to_adj_matrix_torch,
-    graph_to_sparse_adj_matrix_torch,
-    print_graph_stats
+    graph_to_sparse_adj_matrix_torch
 )
+
+def print_simplified_graph_stats(G):
+    """Print only essential graph stats"""
+    print(f"Number of nodes: {G.number_of_nodes()}")
+    print(f"Number of edges: {G.number_of_edges()}")
 
 def run_test(func, *args, n_runs=1, **kwargs):
     """Run a test function multiple times and return timing statistics"""
@@ -64,8 +67,8 @@ def run_test(func, *args, n_runs=1, **kwargs):
     return result, results
 
 def main():
-    parser = argparse.ArgumentParser(description='Run PageRank benchmarks')
-    parser.add_argument('--sizes', type=int, nargs='+', default=[100, 500, 1000, 5000], 
+    parser = argparse.ArgumentParser(description='Run PageRank benchmarks (excluding multiprocessing)')
+    parser.add_argument('--sizes', type=int, nargs='+', default=[100, 500, 1000, 5000, 10000, 15000, 20000, 25000, 30000, 35000, 40000, 50000], 
                         help='Graph sizes to benchmark')
     parser.add_argument('--graph-type', type=str, choices=['random', 'scale-free', 'small-world'], 
                         default='scale-free', help='Type of graph to generate')
@@ -75,9 +78,6 @@ def main():
     parser.add_argument('--damping', type=float, default=0.85, help='Damping factor for PageRank')
     parser.add_argument('--max-iters', type=int, default=100, help='Maximum iterations for PageRank')
     parser.add_argument('--tolerance', type=float, default=1e-6, help='Convergence tolerance for PageRank')
-    parser.add_argument('--processes', type=int, nargs='+', default=[2, 4, 8], 
-                        help='Number of processes for multiprocessing implementations')
-    parser.add_argument('--skip-mp', action='store_true', help='Skip multiprocessing benchmarks')
     parser.add_argument('--verify', action='store_true', help='Verify implementation correctness before benchmarking')
     parser.add_argument('--verify-size', type=int, default=500, help='Graph size for verification')
     
@@ -111,10 +111,6 @@ def main():
             # Rewiring probability of 0.1
             return generate_small_world_graph(n, 10, 0.1, seed=args.seed)
     
-    # Get max available cores
-    max_cores = multiprocessing.cpu_count()
-    print(f"System has {max_cores} CPU cores available")
-    
     # Store results for summary
     all_results = {}
     
@@ -124,7 +120,7 @@ def main():
         
         # Generate verification graph
         G_verify = generate_graph(args.verify_size)
-        print_graph_stats(G_verify)
+        print_simplified_graph_stats(G_verify)
         
         # Convert graph to different representations
         adj_list_verify = graph_to_adj_list(G_verify)
@@ -144,24 +140,6 @@ def main():
         )
         verification_results['Traditional_PageRank'] = traditional_result
         
-        # Run multiprocessing PageRank with a reasonable process count
-        if not args.skip_mp:
-            process_count = min(4, max_cores)
-            print(f"Running multiprocessing PageRank with {process_count} processes for verification...")
-            try:
-                _, mp_result = run_test(
-                    PageRank.traditional_pagerank_multiprocessing,
-                    adj_list_verify,
-                    damping=args.damping,
-                    max_iterations=args.max_iters,
-                    tol=args.tolerance,
-                    num_processes=process_count,
-                    n_runs=1
-                )
-                verification_results[f'MP_PageRank_{process_count}processes'] = mp_result
-            except Exception as e:
-                print(f"Error in multiprocessing PageRank verification: {e}")
-        
         # Run linear algebra PageRank on CPU
         print("Running linear algebra PageRank on CPU for verification...")
         try:
@@ -176,6 +154,40 @@ def main():
             verification_results['LA_PageRank_CPU'] = la_cpu_result
         except Exception as e:
             print(f"Error in LA PageRank verification: {e}")
+        
+        # Run linear algebra PageRank on GPU if requested
+        if args.gpu:
+            # Prepare GPU tensors
+            adj_matrix_torch_verify = graph_to_adj_matrix_torch(G_verify, device=device)
+            adj_matrix_sparse_verify = graph_to_sparse_adj_matrix_torch(G_verify, device=device)
+            
+            print("Running linear algebra PageRank on GPU (dense) for verification...")
+            try:
+                _, la_gpu_result = run_test(
+                    PageRank.la_pagerank_gpu,
+                    adj_matrix_torch_verify,
+                    damping=args.damping,
+                    max_iterations=args.max_iters,
+                    tol=args.tolerance,
+                    n_runs=1
+                )
+                verification_results['LA_PageRank_GPU_Dense'] = la_gpu_result
+            except Exception as e:
+                print(f"Error in LA GPU Dense PageRank verification: {e}")
+            
+            print("Running linear algebra PageRank on GPU (sparse) for verification...")
+            try:
+                _, la_sparse_result = run_test(
+                    PageRank.la_pagerank_sparse_gpu,
+                    adj_matrix_sparse_verify,
+                    damping=args.damping,
+                    max_iterations=args.max_iters,
+                    tol=args.tolerance,
+                    n_runs=1
+                )
+                verification_results['LA_PageRank_GPU_Sparse'] = la_sparse_result
+            except Exception as e:
+                print(f"Error in LA GPU Sparse PageRank verification: {e}")
         
         # Verify results
         print("\nVerifying implementation correctness...")
@@ -229,7 +241,7 @@ def main():
         
         # Generate graph
         G = generate_graph(size)
-        print_graph_stats(G)
+        print_simplified_graph_stats(G)
         
         # Convert graph to different representations
         adj_list = graph_to_adj_list(G)
@@ -262,36 +274,6 @@ def main():
                 print(f"Iterations: {trad_result['iterations']:.1f}")
         except Exception as e:
             print(f"Error in traditional PageRank: {e}")
-        
-        # Run multiprocessing-based PageRank
-        if not args.skip_mp:
-            print("\nRunning multiprocessing PageRank...")
-            
-            # Test with different process counts
-            for process_count in args.processes:
-                if process_count <= max_cores:
-                    print(f"  With {process_count} processes:")
-                    
-                    try:
-                        mp_result, _ = run_test(
-                            PageRank.traditional_pagerank_multiprocessing,
-                            adj_list,
-                            damping=args.damping,
-                            max_iterations=args.max_iters,
-                            tol=args.tolerance,
-                            num_processes=process_count,
-                            n_runs=args.runs
-                        )
-                        size_results[f'MP_PageRank_{process_count}processes'] = mp_result
-                        print(f"  Average time: {mp_result['avg_time']:.6f} seconds")
-                        print(f"  Std dev: {mp_result['std_time']:.6f} seconds")
-                        print(f"  Min time: {mp_result['min_time']:.6f} seconds")
-                        print(f"  Max time: {mp_result['max_time']:.6f} seconds")
-                        if 'iterations' in mp_result:
-                            print(f"  Iterations: {mp_result['iterations']:.1f}")
-                        print(f"  Speedup vs traditional: {trad_result['avg_time'] / mp_result['avg_time']:.2f}x")
-                    except Exception as e:
-                        print(f"  Error in multiprocessing PageRank with {process_count} processes: {e}")
         
         # Run linear algebra PageRank on CPU
         print("\nRunning linear algebra PageRank on CPU...")

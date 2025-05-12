@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-Script to run Connected Components benchmarks comparing traditional and 
-linear algebra implementations (CPU and GPU) - without plotting or saving
+Script to run BFS benchmarks comparing traditional, linear algebra CPU and GPU
+implementations - without plotting or saving
+(excludes multiprocessing implementation)
 """
 
 import os
@@ -14,14 +15,15 @@ import time
 # Add the parent directory to the path so we can import our modules
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.algorithms.connected_components import ConnectedComponents
+from src.algorithms.bfs import BFS
 from src.utils.graph_utils import (
     generate_random_graph, 
     generate_scale_free_graph,
     generate_small_world_graph,
     graph_to_adj_list,
     graph_to_adj_matrix_numpy,
-    graph_to_adj_matrix_torch
+    graph_to_adj_matrix_torch,
+    graph_to_sparse_adj_matrix_torch
 )
 
 def print_simplified_graph_stats(G):
@@ -56,13 +58,13 @@ def run_test(func, *args, n_runs=1, **kwargs):
     return result, results
 
 def main():
-    parser = argparse.ArgumentParser(description='Run Connected Components benchmarks (excluding multiprocessing)')
-    parser.add_argument('--sizes', type=int, nargs='+', default=[15000, 20000, 30000], 
+    parser = argparse.ArgumentParser(description='Run BFS benchmarks (excluding multiprocessing)')
+    parser.add_argument('--sizes', type=int, nargs='+', default=[100, 500, 1000, 5000, 10000, 15000, 20000, 25000, 30000, 35000, 40000, 50000], 
                         help='Graph sizes to benchmark')
     parser.add_argument('--graph-type', type=str, choices=['random', 'scale-free', 'small-world'], 
                         default='scale-free', help='Type of graph to generate')
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
-    parser.add_argument('--runs', type=int, default=1, help='Number of runs for each benchmark')
+    parser.add_argument('--runs', type=int, default=3, help='Number of runs for each benchmark')
     parser.add_argument('--gpu', action='store_true', help='Use GPU acceleration')
     parser.add_argument('--verify', action='store_true', help='Verify implementation correctness before benchmarking')
     parser.add_argument('--verify-size', type=int, default=500, help='Graph size for verification')
@@ -112,77 +114,91 @@ def main():
         adj_list_verify = graph_to_adj_list(G_verify)
         adj_matrix_np_verify = graph_to_adj_matrix_numpy(G_verify)
         
+        # Choose a start node (node with highest degree)
+        start_node_verify = max(G_verify.degree(), key=lambda x: x[1])[0]
+        
         verification_results = {}
         
-        # Run traditional CC
-        print("Running traditional CC for verification...")
+        # Run traditional BFS
+        print("Running traditional BFS for verification...")
         _, traditional_result = run_test(
-            ConnectedComponents.traditional_cc_cpu,
+            BFS.traditional_bfs_cpu,
             adj_list_verify,
+            start_node_verify,
             n_runs=1
         )
-        verification_results['Traditional_CC'] = traditional_result
+        verification_results['Traditional_BFS'] = traditional_result
         
-        # Run linear algebra CC on CPU
-        print("Running linear algebra CC on CPU for verification...")
+        # Run linear algebra BFS on CPU
+        print("Running linear algebra BFS on CPU for verification...")
         try:
             _, la_cpu_result = run_test(
-                ConnectedComponents.la_cc_cpu,
+                BFS.la_bfs_cpu,
                 adj_matrix_np_verify,
+                start_node_verify,
                 n_runs=1
             )
-            verification_results['LA_CC_CPU'] = la_cpu_result
+            verification_results['LA_BFS_CPU'] = la_cpu_result
         except Exception as e:
-            print(f"Error in LA CC verification: {e}")
+            print(f"Error in LA BFS verification: {e}")
         
-        # Run linear algebra CC on GPU if requested
+        # Run linear algebra BFS on GPU if requested
         if args.gpu:
             # Prepare GPU tensors
             adj_matrix_torch_verify = graph_to_adj_matrix_torch(G_verify, device=device)
+            adj_matrix_sparse_verify = graph_to_sparse_adj_matrix_torch(G_verify, device=device)
             
-            print("Running linear algebra CC on GPU (dense) for verification...")
+            print("Running linear algebra BFS on GPU (dense) for verification...")
             try:
                 _, la_gpu_result = run_test(
-                    ConnectedComponents.la_cc_gpu,
+                    BFS.la_bfs_gpu,
                     adj_matrix_torch_verify,
+                    start_node_verify,
                     n_runs=1
                 )
-                verification_results['LA_CC_GPU_Dense'] = la_gpu_result
+                verification_results['LA_BFS_GPU_Dense'] = la_gpu_result
             except Exception as e:
-                print(f"Error in LA GPU Dense CC verification: {e}")
+                print(f"Error in LA GPU Dense BFS verification: {e}")
+            
+            print("Running linear algebra BFS on GPU (sparse) for verification...")
+            try:
+                _, la_sparse_result = run_test(
+                    BFS.la_bfs_sparse_gpu,
+                    adj_matrix_sparse_verify,
+                    start_node_verify,
+                    n_runs=1
+                )
+                verification_results['LA_BFS_GPU_Sparse'] = la_sparse_result
+            except Exception as e:
+                print(f"Error in LA GPU Sparse BFS verification: {e}")
         
         # Verify results
         print("\nVerifying implementation correctness...")
         all_correct = True
-        reference_components, reference_component_map = verification_results['Traditional_CC']
+        reference_visited, reference_distances = verification_results['Traditional_BFS']
         
-        for name, (components, component_map) in verification_results.items():
-            if name == 'Traditional_CC':
+        for name, (visited, distances) in verification_results.items():
+            if name == 'Traditional_BFS':
                 continue
             
-            # Check if the component maps are equivalent (same connectivity)
-            component_match = True
-            for node1 in reference_component_map:
-                for node2 in reference_component_map:
-                    # Check if nodes are in the same component in both implementations
-                    ref_same_component = (reference_component_map[node1] == reference_component_map[node2])
-                    test_same_component = (component_map[node1] == component_map[node2])
-                    
-                    if ref_same_component != test_same_component:
-                        print(f"Mismatch in {name} for nodes {node1} and {node2}")
-                        component_match = False
-                        all_correct = False
-                        break
-                
-                if not component_match:
+            # Check if all nodes in the reference implementation have the same distance
+            distances_match = True
+            for node, distance in reference_distances.items():
+                if node not in distances or distances[node] != distance:
+                    print(f"Distance mismatch in {name} for node {node}: "
+                          f"Expected {distance}, Got {distances.get(node, 'missing')}")
+                    distances_match = False
+                    all_correct = False
                     break
             
-            # Check number of components
-            if len(reference_components) != len(components):
-                print(f"Number of components mismatch in {name}: Expected {len(reference_components)}, Got {len(components)}")
-                all_correct = False
+            # Check if all nodes in this implementation are in the reference
+            for node in distances:
+                if node not in reference_distances:
+                    print(f"Node {node} in {name} but not in reference implementation")
+                    all_correct = False
+                    break
             
-            if component_match and len(reference_components) == len(components):
+            if distances_match:
                 print(f"{name} matches the reference implementation")
         
         if not all_correct:
@@ -208,52 +224,75 @@ def main():
         
         if args.gpu:
             adj_matrix_torch = graph_to_adj_matrix_torch(G, device=device)
+            adj_matrix_sparse = graph_to_sparse_adj_matrix_torch(G, device=device)
+        
+        # Choose a start node (node with highest degree)
+        start_node = max(G.degree(), key=lambda x: x[1])[0]
         
         # Store results for this size
         size_results = {}
         
-        # Run traditional CC
-        print("\nRunning traditional CC...")
+        # Run traditional BFS
+        print("\nRunning traditional BFS...")
         trad_result, _ = run_test(
-            ConnectedComponents.traditional_cc_cpu,
+            BFS.traditional_bfs_cpu,
             adj_list,
+            start_node,
             n_runs=args.runs
         )
-        size_results['Traditional_CC'] = trad_result
+        size_results['Traditional_BFS'] = trad_result
         print(f"Average time: {trad_result['avg_time']:.6f} seconds")
         print(f"Std dev: {trad_result['std_time']:.6f} seconds")
         print(f"Min time: {trad_result['min_time']:.6f} seconds")
         print(f"Max time: {trad_result['max_time']:.6f} seconds")
         
-        # Run linear algebra CC on CPU
-        print("\nRunning linear algebra CC on CPU...")
+        # Run linear algebra BFS on CPU
+        print("\nRunning linear algebra BFS on CPU...")
         la_cpu_result, _ = run_test(
-            ConnectedComponents.la_cc_cpu,
+            BFS.la_bfs_cpu,
             adj_matrix_np,
+            start_node,
             n_runs=args.runs
         )
-        size_results['LA_CC_CPU'] = la_cpu_result
+        size_results['LA_BFS_CPU'] = la_cpu_result
         print(f"Average time: {la_cpu_result['avg_time']:.6f} seconds")
         print(f"Std dev: {la_cpu_result['std_time']:.6f} seconds")
         print(f"Min time: {la_cpu_result['min_time']:.6f} seconds")
         print(f"Max time: {la_cpu_result['max_time']:.6f} seconds")
         print(f"Speedup vs traditional: {trad_result['avg_time'] / la_cpu_result['avg_time']:.2f}x")
         
-        # Run linear algebra CC on GPU if requested
+        # Run linear algebra BFS on GPU if requested
         if args.gpu:
-            print("\nRunning linear algebra CC on GPU (dense)...")
+            print("\nRunning linear algebra BFS on GPU (dense)...")
             la_gpu_result, _ = run_test(
-                ConnectedComponents.la_cc_gpu,
+                BFS.la_bfs_gpu,
                 adj_matrix_torch,
+                start_node,
                 n_runs=args.runs
             )
-            size_results['LA_CC_GPU_Dense'] = la_gpu_result
+            size_results['LA_BFS_GPU_Dense'] = la_gpu_result
             print(f"Average time: {la_gpu_result['avg_time']:.6f} seconds")
             print(f"Std dev: {la_gpu_result['std_time']:.6f} seconds")
             print(f"Min time: {la_gpu_result['min_time']:.6f} seconds")
             print(f"Max time: {la_gpu_result['max_time']:.6f} seconds")
             print(f"Speedup vs traditional: {trad_result['avg_time'] / la_gpu_result['avg_time']:.2f}x")
             print(f"Speedup vs LA CPU: {la_cpu_result['avg_time'] / la_gpu_result['avg_time']:.2f}x")
+            
+            print("\nRunning linear algebra BFS on GPU (sparse)...")
+            la_sparse_result, _ = run_test(
+                BFS.la_bfs_sparse_gpu,
+                adj_matrix_sparse,
+                start_node,
+                n_runs=args.runs
+            )
+            size_results['LA_BFS_GPU_Sparse'] = la_sparse_result
+            print(f"Average time: {la_sparse_result['avg_time']:.6f} seconds")
+            print(f"Std dev: {la_sparse_result['std_time']:.6f} seconds")
+            print(f"Min time: {la_sparse_result['min_time']:.6f} seconds")
+            print(f"Max time: {la_sparse_result['max_time']:.6f} seconds")
+            print(f"Speedup vs traditional: {trad_result['avg_time'] / la_sparse_result['avg_time']:.2f}x")
+            print(f"Speedup vs LA CPU: {la_cpu_result['avg_time'] / la_sparse_result['avg_time']:.2f}x")
+            print(f"Speedup vs LA GPU Dense: {la_gpu_result['avg_time'] / la_sparse_result['avg_time']:.2f}x")
         
         # Store results for this size
         all_results[size] = size_results
@@ -265,31 +304,29 @@ def main():
     
     # Print header
     headers = ["Size", "Algorithm", "Avg Time (s)", "Std Dev", "Min Time (s)", "Max Time (s)", "Speedup"]
-    print(f"{headers[0]:<10} {headers[1]:<35} {headers[2]:<15} {headers[3]:<10} {headers[4]:<15} {headers[5]:<15} {headers[6]:<10}")
-    print("-" * 110)
+    print(f"{headers[0]:<10} {headers[1]:<25} {headers[2]:<15} {headers[3]:<10} {headers[4]:<15} {headers[5]:<15} {headers[6]:<10}")
+    print("-" * 100)
     
     # Print results for each size
     for size in sorted(all_results.keys()):
         size_results = all_results[size]
-        trad_time = size_results['Traditional_CC']['avg_time']
+        trad_time = size_results['Traditional_BFS']['avg_time']
         
         # Print traditional first
-        alg_name = 'Traditional_CC'
+        alg_name = 'Traditional_BFS'
         result = size_results[alg_name]
-        print(f"{size:<10} {alg_name:<35} {result['avg_time']:<15.6f} {result['std_time']:<10.6f} "
+        print(f"{size:<10} {alg_name:<25} {result['avg_time']:<15.6f} {result['std_time']:<10.6f} "
               f"{result['min_time']:<15.6f} {result['max_time']:<15.6f} {1.0:<10.2f}")
         
         # Then print other algorithms
         for alg_name, result in size_results.items():
-            if alg_name == 'Traditional_CC':
+            if alg_name == 'Traditional_BFS':
                 continue
             speedup = trad_time / result['avg_time']
-            print(f"{'':<10} {alg_name:<35} {result['avg_time']:<15.6f} {result['std_time']:<10.6f} "
+            print(f"{'':<10} {alg_name:<25} {result['avg_time']:<15.6f} {result['std_time']:<10.6f} "
                   f"{result['min_time']:<15.6f} {result['max_time']:<15.6f} {speedup:<10.2f}")
         
-        print("-" * 110)
-        
-    print("\nBenchmarking complete.")
+        print("-" * 100)
 
 if __name__ == '__main__':
     main()
