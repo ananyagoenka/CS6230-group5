@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Script to run BFS benchmarks comparing traditional, linear algebra CPU and GPU
-implementations - without plotting or saving
+implementations 
 (excludes multiprocessing implementation)
 """
 
@@ -59,7 +59,7 @@ def run_test(func, *args, n_runs=1, **kwargs):
 
 def main():
     parser = argparse.ArgumentParser(description='Run BFS benchmarks (excluding multiprocessing)')
-    parser.add_argument('--sizes', type=int, nargs='+', default=[10000, 20000, 30000, 40000, 50000, 60000, 70000, 80000], 
+    parser.add_argument('--sizes', type=int, nargs='+', default=[10000, 20000, 30000, 40000], 
                         help='Graph sizes to benchmark')
     parser.add_argument('--graph-type', type=str, choices=['random', 'scale-free', 'small-world'], 
                         default='scale-free', help='Type of graph to generate')

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Script to run PageRank benchmarks comparing traditional and linear algebra 
-implementations - without plotting or saving (excludes multiprocessing)
+implementations - (excludes multiprocessing)
 """
 
 import os
@@ -189,7 +189,7 @@ def main():
             except Exception as e:
                 print(f"Error in LA GPU Sparse PageRank verification: {e}")
         
-        # Verify results
+        # Verify results - MODIFIED CODE HERE
         print("\nVerifying implementation correctness...")
         all_correct = True
         reference_ranks, _ = verification_results['Traditional_PageRank']
@@ -198,33 +198,53 @@ def main():
             if name == 'Traditional_PageRank':
                 continue
             
-            # Check if all nodes in the reference have similar rank
+            # Convert array/tensor results to dictionary if needed
+            if not isinstance(ranks, dict):
+                # For numpy arrays or torch tensors
+                if hasattr(ranks, 'cpu') and hasattr(ranks, 'numpy'):
+                    # Convert torch tensor to numpy
+                    ranks_array = ranks.cpu().numpy()
+                else:
+                    # Already numpy array
+                    ranks_array = ranks
+                    
+                # Create dictionary mapping node IDs to ranks
+                ranks_dict = {i: float(ranks_array[i]) for i in range(len(ranks_array))}
+                ranks = ranks_dict
+            
+            # Check if ranks match with reference
             ranks_match = True
-            for node, rank in reference_ranks.items():
+            max_diff = 0
+            
+            # Check if all nodes in reference exist in this implementation with similar ranks
+            for node, ref_rank in reference_ranks.items():
                 if node not in ranks:
                     print(f"Node {node} missing in {name}")
                     ranks_match = False
                     all_correct = False
                     break
                 
-                # Check if the ranks are similar within tolerance
-                if abs(float(rank) - float(ranks[node])) > 1e-5:
+                # Check if ranks are similar within tolerance
+                diff = abs(float(ref_rank) - float(ranks[node]))
+                max_diff = max(max_diff, diff)
+                
+                if diff > 1e-5:
                     print(f"Rank mismatch in {name} for node {node}: "
-                          f"Expected {rank}, Got {ranks[node]}, Diff {abs(float(rank) - float(ranks[node]))}")
+                          f"Expected {ref_rank}, Got {ranks[node]}, Diff {diff}")
                     ranks_match = False
                     all_correct = False
                     break
             
-            # Check if all nodes in this implementation are in the reference
+            # Check if all nodes in this implementation exist in reference
             for node in ranks:
                 if node not in reference_ranks:
-                    print(f"Node {node} in {name} but not in reference implementation")
+                    print(f"Extra node {node} in {name} not in reference implementation")
                     ranks_match = False
                     all_correct = False
                     break
             
             if ranks_match:
-                print(f"{name} matches the reference implementation")
+                print(f"{name} matches the reference implementation (max diff: {max_diff:.8f})")
         
         if not all_correct:
             print("\nWARNING: Some implementations do not match the reference!")
