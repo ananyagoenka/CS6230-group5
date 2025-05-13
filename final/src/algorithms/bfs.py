@@ -533,3 +533,290 @@ class BFS:
             level += 1
         
         return visited, distances
+    
+    @staticmethod
+    def la_bfs_sparse_gpu_optimized_v2(adj_matrix, start_node):
+        """
+        Alternative CUDA-optimized BFS implementation leveraging
+        sparse matrix operations more efficiently.
+        
+        This version is specifically tuned for newer CUDA architecture - A100.
+        
+        Parameters:
+        -----------
+        adj_matrix : torch.sparse.Tensor
+            Sparse adjacency matrix representation of the graph on GPU
+        start_node : int
+            Starting node for BFS
+                
+        Returns:
+        --------
+        visited : list
+            List of nodes in BFS order
+        distances : dict
+            Dictionary of distances from start_node to each node
+        """
+        device = adj_matrix.device
+        n = adj_matrix.shape[0]
+        
+        # Initialize data structures
+        distances = {node: float('infinity') for node in range(n)}
+        distances[start_node] = 0
+        
+        visited = [start_node]
+        
+        # Create frontier vector - one-hot encoding of start node
+        frontier = torch.zeros(n, device=device)
+        frontier[start_node] = 1
+        
+        # Create visited mask
+        visited_mask = torch.zeros(n, dtype=torch.bool, device=device)
+        visited_mask[start_node] = True
+        
+        level = 0
+        
+        # For collecting nodes at each level for accurate distance assignment
+        level_nodes = []
+        level_nodes.append([start_node])
+        
+        # BFS main loop
+        while frontier.any():
+            # Sparse matrix multiplication to find all neighbors of the current frontier
+            # This single operation effectively expands the frontier
+            frontier = torch.sparse.mm(adj_matrix, frontier.view(-1, 1)).view(-1)
+            
+            # Apply mask to keep only unvisited nodes
+            frontier = frontier * (~visited_mask).float()
+            
+            # If no new nodes, break
+            if not frontier.any():
+                break
+            
+            # Threshold to convert to binary (any value > 0 becomes 1)
+            frontier = (frontier > 0).float()
+            
+            # Get the nodes in the new frontier
+            new_nodes = torch.nonzero(frontier).flatten().cpu().numpy()
+            
+            if len(new_nodes) > 0:
+                # Update visited mask
+                visited_mask[new_nodes] = True
+                
+                # Add to visited list
+                visited.extend(new_nodes)
+                
+                # Increment level
+                level += 1
+                
+                # Store nodes at this level
+                level_nodes.append(new_nodes)
+                
+                # Update distances for nodes at this level
+                for node in new_nodes:
+                    distances[node] = level
+        
+        return visited, distances
+
+    @staticmethod
+    def la_bfs_sparse_gpu_optimized_v2_enhanced(adj_matrix, start_node):
+        """
+        Enhanced CUDA-optimized BFS implementation using sparse adjacency matrix.
+        
+        This implementation focuses on:
+        1. Minimizing memory operations and synchronizations
+        2. Efficient sparse matrix operations
+        3. Optimized frontier expansion
+        4. Balancing simplicity with performance
+        
+        Parameters:
+        -----------
+        adj_matrix : torch.sparse.Tensor
+            Sparse adjacency matrix representation of the graph on GPU
+        start_node : int
+            Starting node for BFS
+                
+        Returns:
+        --------
+        visited : list
+            List of nodes in BFS order
+        distances : dict
+            Dictionary of distances from start_node to each node
+        """
+        device = adj_matrix.device
+        n = adj_matrix.shape[0]
+        
+        # Initialize distances
+        distances = {node: float('infinity') for node in range(n)}
+        distances[start_node] = 0
+        
+        # Initialize visited list with start node
+        visited = [start_node]
+        
+        # Initialize visited mask and frontier
+        # Using bool tensors is more memory-efficient
+        visited_mask = torch.zeros(n, dtype=torch.bool, device=device)
+        visited_mask[start_node] = True
+        
+        # Create frontier vector with start node
+        frontier = torch.zeros(n, dtype=torch.bool, device=device)
+        frontier[start_node] = True
+        
+        # Pre-transpose the matrix for more efficient column access
+        # This is beneficial for the pattern of access in BFS
+        # adj_matrix_t = adj_matrix.t().coalesce()
+        
+        # Current BFS level
+        level = 0
+        
+        # Track accumulated nodes at each level for efficient collection
+        nodes_by_level = []
+        nodes_by_level.append([start_node])
+        
+        # Main BFS loop
+        while frontier.any():
+            # Sparse matrix-vector product to find neighbors
+            # This uses PyTorch's highly optimized sparse operations
+            # We convert frontier to float for matrix multiplication
+            new_frontier = torch.sparse.mm(adj_matrix, frontier.float().view(-1, 1)).view(-1)
+            
+            # Convert to binary (>0 becomes True)
+            new_frontier = (new_frontier > 0)
+            
+            # Only keep unvisited nodes
+            new_frontier.logical_and_(~visited_mask)
+            
+            # If no new nodes, break
+            if not new_frontier.any():
+                break
+            
+            # Update level
+            level += 1
+            
+            # Update visited mask
+            visited_mask.logical_or_(new_frontier)
+            
+            # Get new nodes for this level
+            new_nodes = torch.nonzero(new_frontier).flatten()
+            
+            # Collect these nodes
+            level_nodes = new_nodes.cpu().numpy()
+            
+            # Update distances for all nodes at this level at once
+            for node in level_nodes:
+                distances[node] = level
+            
+            # Add to visited list
+            visited.extend(level_nodes)
+            nodes_by_level.append(level_nodes)
+            
+            # Move to next frontier
+            frontier = new_frontier
+        
+        return visited, distances
+
+    @staticmethod
+    def la_bfs_sparse_gpu_optimized_v2_turbo(adj_matrix, start_node):
+        """
+        Sparse BFS implementation focusing on throughput optimization.
+        
+        Key optimizations:
+        1. Direct sparse matrix multiplication with minimal conversions
+        2. Minimal memory allocation in the hot loop
+        3. Efficient use of boolean operations with caching
+        4. Optimized for modern CUDA architectures
+        
+        Parameters:
+        -----------
+        adj_matrix : torch.sparse.Tensor
+            Sparse adjacency matrix representation of the graph on GPU
+        start_node : int
+            Starting node for BFS
+                
+        Returns:
+        --------
+        visited : list
+            List of nodes in BFS order
+        distances : dict
+            Dictionary of distances from start_node to each node
+        """
+        device = adj_matrix.device
+        n = adj_matrix.shape[0]
+        
+        # Initialize with very efficient data structures
+        distances_tensor = torch.full((n,), float('inf'), dtype=torch.float32, device=device)
+        distances_tensor[start_node] = 0
+        
+        visited = [start_node]
+        
+        # Use float tensors directly for frontier to avoid type conversions in the matrix multiply
+        current_frontier = torch.zeros(n, dtype=torch.float32, device=device)
+        current_frontier[start_node] = 1.0
+        
+        # Use a single boolean mask for visited tracking
+        visited_mask = torch.zeros(n, dtype=torch.bool, device=device)
+        visited_mask[start_node] = True
+        
+        # Ensure the sparse matrix is coalesced for optimal performance
+        if not adj_matrix.is_coalesced():
+            adj_matrix = adj_matrix.coalesce()
+        
+        level = 0
+        
+        # Main loop - continue until no nodes in frontier
+        while torch.any(current_frontier > 0):
+            # Perform sparse matrix multiplication in one highly optimized operation
+            # This avoids creating temporary tensors
+            next_frontier = torch.sparse.mm(adj_matrix, current_frontier.view(-1, 1)).view(-1)
+            
+            # Stop if we didn't find any new nodes
+            if not torch.any(next_frontier > 0):
+                break
+            
+            # Increment level for newly discovered nodes
+            level += 1
+            
+            # Apply mask directly to the frontier to zero out already visited nodes
+            # This fused operation is more efficient
+            next_frontier.masked_fill_(visited_mask, 0.0)
+            
+            # Identify all newly discovered nodes
+            # nonzero() is efficient on modern GPUs
+            new_nodes_mask = next_frontier > 0
+            
+            # If no new nodes, break
+            if not torch.any(new_nodes_mask):
+                break
+            
+            # Update visited mask
+            visited_mask.logical_or_(new_nodes_mask)
+            
+            # Get the actual node indices and store their distance
+            new_nodes = torch.nonzero(new_nodes_mask).flatten()
+            
+            # Efficiently update the distances tensor
+            distances_tensor.masked_fill_(new_nodes_mask, level)
+            
+            # Collect nodes in BFS order
+            visited.extend(new_nodes.cpu().numpy())
+            
+            # Binarize frontier for next iteration (any value > 0 becomes 1.0)
+            # This is more efficient than creating a new tensor
+            next_frontier = (next_frontier > 0).float()
+            
+            # Update current frontier for next iteration
+            current_frontier = next_frontier
+        
+        # Convert distance tensor to dictionary only at the end
+        # Only process finite values to avoid unnecessary work
+        finite_mask = torch.isfinite(distances_tensor)
+        node_indices = torch.nonzero(finite_mask).flatten().cpu().numpy()
+        node_distances = distances_tensor[finite_mask].cpu().numpy()
+        
+        distances = {int(idx): float(dist) for idx, dist in zip(node_indices, node_distances)}
+        
+        # Add infinity for unreachable nodes
+        for i in range(n):
+            if i not in distances:
+                distances[i] = float('infinity')
+        
+        return visited, distances
