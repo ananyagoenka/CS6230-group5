@@ -567,7 +567,7 @@ def plot_weak_scaling_results(results, output_dir=None):
 
 def main():
     parser = argparse.ArgumentParser(description='Run PageRank benchmarks with multi-GPU scaling')
-    parser.add_argument('--base-size', type=int, default=1000000, 
+    parser.add_argument('--base-size', type=int, default=100000, 
                         help='Base graph size for tests')
     parser.add_argument('--graph-type', type=str, choices=['random', 'scale-free', 'small-world'], 
                         default='scale-free', help='Type of graph to generate')
