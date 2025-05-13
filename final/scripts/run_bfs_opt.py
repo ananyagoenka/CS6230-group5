@@ -85,7 +85,7 @@ def run_test(func, *args, n_runs=1, **kwargs):
 def main():
     parser = argparse.ArgumentParser(description='Run BFS benchmarks with CUDA-optimized implementation')
     parser.add_argument('--sizes', type=int, nargs='+', 
-                        default=[500, 1000, 2500, 5000, 7500, 10000], 
+                        default=[10000], 
                         help='Graph sizes to benchmark (no size limit)')
     parser.add_argument('--graph-type', type=str, choices=['random', 'scale-free', 'small-world'], 
                         default='scale-free', help='Type of graph to generate')
@@ -195,7 +195,7 @@ def main():
         print("Running CUDA-optimized sparse BFS on GPU for verification...")
         try:
             _, la_opt_sparse_result = run_test(
-                BFS.la_bfs_sparse_gpu_optimized_v2,
+                BFS.la_bfs_sparse_gpu_optimized_v2_turbo,
                 adj_matrix_sparse_verify,
                 start_node_verify,
                 n_runs=1
@@ -360,7 +360,7 @@ def main():
             # Run CUDA-optimized sparse GPU BFS
             print("\nRunning CUDA-optimized sparse BFS on GPU...")
             la_opt_sparse_result, _ = run_test(
-                BFS.la_bfs_sparse_gpu_optimized_v2,
+                BFS.la_bfs_sparse_gpu_optimized_v2_turbo,
                 adj_matrix_sparse,
                 start_node,
                 n_runs=args.runs

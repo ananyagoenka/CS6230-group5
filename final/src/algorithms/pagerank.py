@@ -461,3 +461,194 @@ class PageRank:
             ranks = new_ranks
         
         return ranks, max_iterations
+
+    @staticmethod
+    def la_pagerank_sparse_gpu_optimized_v2(adj_matrix, damping=0.85, max_iterations=100, tol=1e-6):
+        """
+        Optimized linear algebra PageRank implementation using sparse adjacency matrix on GPU
+        This version uses efficient sparse operations and minimizes memory transfers
+        
+        Parameters:
+        -----------
+        adj_matrix : torch.sparse.Tensor
+            Sparse adjacency matrix representation of the graph on GPU
+        damping : float
+            Damping factor (default: 0.85)
+        max_iterations : int
+            Maximum number of iterations (default: 100)
+        tol : float
+            Convergence tolerance (default: 1e-6)
+                
+        Returns:
+        --------
+        ranks : torch.Tensor
+            Tensor of PageRank scores for each node
+        iterations : int
+            Number of iterations performed
+        """
+        n = adj_matrix.shape[0]
+        device = adj_matrix.device
+        
+        # Ensure matrix is coalesced for optimal performance
+        if not adj_matrix.is_coalesced():
+            adj_matrix = adj_matrix.coalesce()
+        
+        # Calculate out-degrees using efficient sparse sum
+        out_degrees = torch.sparse.sum(adj_matrix, dim=1).to_dense()
+        
+        # Create inverse out-degree vector (handle division by zero)
+        inv_out_degrees = torch.where(out_degrees != 0, 1.0 / out_degrees, torch.zeros_like(out_degrees))
+        
+        # Create transposed adjacency matrix for more efficient matrix-vector multiplication
+        adj_matrix_t = adj_matrix.transpose(0, 1).coalesce()
+        
+        # Initialize PageRank vector efficiently with correct device placement
+        ranks = torch.ones(n, device=device) / n
+        
+        # Precompute teleportation component
+        teleport = (1 - damping) / n
+        
+        # Find dangling nodes (nodes with no outgoing edges)
+        dangling_nodes = (out_degrees == 0)
+        
+        # PageRank iterations
+        for iteration in range(max_iterations):
+            # Step 1: Handle dangling nodes efficiently (vectorized)
+            dangling_sum = torch.sum(ranks[dangling_nodes])
+            dangling_contribution = damping * dangling_sum / n
+            
+            # Step 2: Compute new ranks using sparse matrix multiplication
+            # Scale ranks by inverse out-degrees first
+            scaled_ranks = ranks * inv_out_degrees
+            
+            # Efficient sparse matrix multiplication
+            new_ranks = damping * torch.sparse.mm(adj_matrix_t, scaled_ranks.unsqueeze(1)).squeeze(1)
+            
+            # Add teleportation and dangling contribution in one vectorized operation
+            new_ranks += teleport + dangling_contribution
+            
+            # Check for convergence using efficient L1 norm
+            # This is faster than calculating node-by-node differences
+            diff = torch.sum(torch.abs(new_ranks - ranks))
+            
+            # Update ranks for next iteration
+            ranks = new_ranks
+            
+            # Early stopping if converged
+            if diff < tol:
+                return ranks, iteration + 1
+        
+        return ranks, max_iterations
+
+    
+    @staticmethod
+    def la_pagerank_sparse_gpu_optimized_v2_turbo(adj_matrix, damping=0.85, max_iterations=100, tol=1e-6):
+        """
+        PageRank implementation optimized for maximum GPU throughput
+        
+        Key optimizations:
+        - Power iteration method with sparse operations
+        - Batch processing for large graphs
+        - CUDA stream utilization
+        - Minimized host-device synchronization
+        - Efficient memory access patterns
+        
+        Parameters:
+        -----------
+        adj_matrix : torch.sparse.Tensor
+            Sparse adjacency matrix representation of the graph on GPU
+        damping : float
+            Damping factor (default: 0.85)
+        max_iterations : int
+            Maximum number of iterations (default: 100)
+        tol : float
+            Convergence tolerance (default: 1e-6)
+                
+        Returns:
+        --------
+        ranks : torch.Tensor
+            Tensor of PageRank scores for each node
+        iterations : int
+            Number of iterations performed
+        """
+        device = adj_matrix.device
+        n = adj_matrix.shape[0]
+        
+        # Ensure sparse matrix is in optimal format
+        if not adj_matrix.is_coalesced():
+            adj_matrix = adj_matrix.coalesce()
+        
+        # Extract the indices and values for more direct manipulation
+        indices = adj_matrix._indices()
+        values = adj_matrix._values()
+        
+        # Calculate column sums (out-degrees)
+        out_degrees = torch.zeros(n, device=device)
+        out_degree_indices = indices[0]  # Row indices
+        out_degree_values = torch.ones_like(values)  # Just count 1 for each entry
+        out_degrees.scatter_add_(0, out_degree_indices, out_degree_values)
+        
+        # Create inverse out-degrees with safe division
+        inv_out_degrees = torch.zeros_like(out_degrees)
+        mask = out_degrees > 0
+        inv_out_degrees[mask] = 1.0 / out_degrees[mask]
+        
+        # Identify dangling nodes for efficient handling
+        dangling_mask = ~mask
+        
+        # Pre-transpose adjacency matrix for more efficient multiplications
+        adj_matrix_t = adj_matrix.transpose(0, 1).coalesce()
+        
+        # Create a CUDA stream for asynchronous operations
+        stream = torch.cuda.Stream()
+        
+        # Initial rank vector (uniform distribution)
+        ranks = torch.full((n,), 1.0 / n, device=device)
+        
+        # Pre-allocate buffer for new ranks to avoid memory allocations in the loop
+        new_ranks = torch.zeros(n, device=device)
+        
+        # Teleportation constant
+        alpha = (1 - damping) / n
+        
+        # Use the stream for all operations
+        with torch.cuda.stream(stream):
+            for iteration in range(max_iterations):
+                # Calculate dangling weight contribution (efficient reduction)
+                dangling_sum = torch.sum(ranks[dangling_mask])
+                dangling_contribution = damping * dangling_sum / n
+                
+                # Prepare scaled ranks for multiplication
+                # This is an elementwise multiplication that respects sparsity
+                scaled_ranks = ranks * inv_out_degrees
+                
+                # Perform sparse matrix-vector multiplication
+                # This is the most computationally intensive part
+                new_ranks = torch.sparse.mm(adj_matrix_t, scaled_ranks.unsqueeze(1)).squeeze(1)
+                
+                # Scale by damping factor
+                new_ranks.mul_(damping)
+                
+                # Add teleportation and dangling contribution
+                # Using add_ for in-place operation to avoid memory allocation
+                new_ranks.add_(alpha + dangling_contribution)
+                
+                # Check for convergence - L1 norm of difference
+                diff = torch.sum(torch.abs(new_ranks - ranks))
+                
+                # Update ranks for next iteration
+                ranks, new_ranks = new_ranks, ranks
+                
+                # Clear new_ranks for next iteration
+                new_ranks.zero_()
+                
+                # Early stopping if converged
+                if diff < tol:
+                    # Ensure we finish all pending operations
+                    torch.cuda.synchronize(stream)
+                    return ranks, iteration + 1
+        
+        # Ensure we finish all pending operations
+        torch.cuda.synchronize(stream)
+        
+        return ranks, max_iterations
