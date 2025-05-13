@@ -82,7 +82,7 @@ def run_test(func, *args, n_runs=1, **kwargs):
 def main():
     parser = argparse.ArgumentParser(description='Run PageRank benchmarks with CUDA-optimized implementation')
     parser.add_argument('--sizes', type=int, nargs='+', 
-                        default=[10000, 20000, 30000, 40000, 50000, 60000, 70000, 80000, 90000, 100000], 
+                        default=[100000, 200000, 300000, 400000, 500000, 600000, 700000, 800000, 900000, 1000000], 
                         help='Graph sizes to benchmark')
     parser.add_argument('--graph-type', type=str, choices=['random', 'scale-free', 'small-world'], 
                         default='scale-free', help='Type of graph to generate')
@@ -279,8 +279,8 @@ def main():
             
             # Skip traditional PageRank for very large graphs or if requested
             run_traditional = (
-                not args.skip_traditional and 
-                size <= args.max_traditional_size
+                not args.skip_traditional  
+                # size <= args.max_traditional_size
             )
             
             if run_traditional:
