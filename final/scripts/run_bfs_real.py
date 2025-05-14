@@ -199,7 +199,7 @@ def main():
     parser.add_argument('--runs', type=int, default=3, help='Number of runs for each benchmark')
     parser.add_argument('--verify', action='store_true', help='Verify implementation correctness before benchmarking')
     parser.add_argument('--skip-traditional', action='store_true', help='Skip traditional CPU implementation')
-    parser.add_argument('--max-traditional-size', type=int, default=1000000,
+    parser.add_argument('--max-traditional-size', type=int, default=3000000,
                         help='Maximum graph size for traditional implementation (skipped if larger)')
     parser.add_argument('--only-gpu', action='store_true', help='Only run GPU implementations')
     parser.add_argument('--only-optimized', action='store_true', help='Only run optimized GPU implementation')

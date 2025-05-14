@@ -214,7 +214,7 @@ def main():
     parser.add_argument('--tolerance', type=float, default=1e-6, help='Convergence tolerance for PageRank')
     parser.add_argument('--verify', action='store_true', help='Verify implementation correctness before benchmarking')
     parser.add_argument('--skip-traditional', action='store_true', help='Skip traditional CPU implementation')
-    parser.add_argument('--max-traditional-size', type=int, default=1000000,
+    parser.add_argument('--max-traditional-size', type=int, default=3000000,
                         help='Maximum graph size for traditional implementation (skipped if larger)')
     parser.add_argument('--only-optimized', action='store_true', 
                         help='Only run optimized GPU implementation')
