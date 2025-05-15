@@ -68,7 +68,7 @@ def run_test(func, *args, n_runs=1, **kwargs):
 
 def main():
     parser = argparse.ArgumentParser(description='Run PageRank benchmarks (excluding multiprocessing)')
-    parser.add_argument('--sizes', type=int, nargs='+', default=[100, 500, 1000, 5000, 10000, 15000, 20000, 25000, 30000, 35000, 40000, 50000], 
+    parser.add_argument('--sizes', type=int, nargs='+', default=[100, 500, 1000, 5000, 10000, 15000, 20000], 
                         help='Graph sizes to benchmark')
     parser.add_argument('--graph-type', type=str, choices=['random', 'scale-free', 'small-world'], 
                         default='scale-free', help='Type of graph to generate')
